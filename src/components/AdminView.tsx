@@ -11,13 +11,7 @@ interface AdminViewProps {
   onCreateUser: (user: User) => Promise<void>;
 }
 
-const SECURITY_QUESTIONS = [
-  "What was the name of your first pet?",
-  "What is your mother's maiden name?",
-  "In what city were you born?",
-  "What was the name of your first school?",
-  "What is your favorite book or movie?"
-];
+
 
 export const AdminView: React.FC<AdminViewProps> = ({
   users,
@@ -32,8 +26,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
-  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
-  const [securityAnswer, setSecurityAnswer] = useState('');
+
   
   // Reusable custom premium alert modal popup state
   const [alertModal, setAlertModal] = useState<{
@@ -103,7 +96,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
     e.preventDefault();
 
     const cleanUsername = username.trim().toLowerCase();
-    if (!name.trim() || !cleanUsername || !password || !securityAnswer.trim()) {
+    if (!name.trim() || !cleanUsername || !password) {
       setAlertModal({
         show: true,
         title: 'Validation Error',
@@ -126,7 +119,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
     setIsSubmitting(true);
     try {
       const passwordHash = await hashPassword(cleanUsername, password);
-      const answerHash = await hashPassword(cleanUsername, securityAnswer.trim().toLowerCase());
 
       const newUser: User = {
         id: createId(),
@@ -134,8 +126,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         username: cleanUsername,
         role,
         passwordHash,
-        securityQuestion,
-        securityAnswerHash: answerHash,
+        securityQuestion: '',
+        securityAnswerHash: '',
         createdAt: new Date().toISOString()
       };
 
@@ -145,9 +137,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       setName('');
       setUsername('');
       setPassword('');
-      setSecurityAnswer('');
       setRole('user');
-      setSecurityQuestion(SECURITY_QUESTIONS[0]);
 
       setAlertModal({
         show: true,
@@ -278,44 +268,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </label>
               </div>
 
-              <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '10px 0' }} />
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <label className="field" htmlFor="adminCreateSecurityQ">
-                  <span>Security Recovery Question</span>
-                  <select
-                    id="adminCreateSecurityQ"
-                    value={securityQuestion}
-                    onChange={(e) => setSecurityQuestion(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      background: 'var(--field)',
-                      border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      color: 'var(--text)',
-                      fontSize: '14px',
-                      outline: 'none'
-                    }}
-                  >
-                    {SECURITY_QUESTIONS.map((q) => (
-                      <option key={q} value={q}>{q}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="field" htmlFor="adminCreateSecurityA">
-                  <span>Security Answer</span>
-                  <input
-                    id="adminCreateSecurityA"
-                    type="text"
-                    placeholder="Security answer"
-                    required
-                    value={securityAnswer}
-                    onChange={(e) => setSecurityAnswer(e.target.value)}
-                  />
-                </label>
-              </div>
 
               <button
                 className="button button-primary"

@@ -208,14 +208,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 
                 return (
                   <tr key={row.category} style={{ borderBottom: '1px solid var(--border-glass)' }} className="table-row-hover">
-                    <td style={{ padding: '16px 24px', fontWeight: 600 }}>{row.category}</td>
-                    <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                    <td data-label="Category" style={{ padding: '16px 24px', fontWeight: 600 }}>{row.category}</td>
+                    <td data-label="Budget Limit" style={{ padding: '16px 24px', textAlign: 'right' }}>
                       {row.limit > 0 ? formatMoney(row.limit, dashboardCurrency) : '—'}
                     </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: 600 }}>
+                    <td data-label="Actual Spent" style={{ padding: '16px 24px', textAlign: 'right', fontWeight: 600 }}>
                       {row.spent > 0 ? formatMoney(row.spent, dashboardCurrency) : '—'}
                     </td>
-                    <td style={{ 
+                    <td data-label="Difference" style={{ 
                       padding: '16px 24px', 
                       textAlign: 'right', 
                       fontWeight: 700,
@@ -226,7 +226,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                         : `${diffIsNegative ? '-' : '+'}${formatMoney(Math.abs(row.difference), dashboardCurrency)}`
                       }
                     </td>
-                    <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                    <td data-label="Status" style={{ padding: '16px 24px', textAlign: 'center' }}>
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 700,

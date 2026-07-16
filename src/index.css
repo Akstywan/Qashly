@@ -1126,47 +1126,76 @@ tbody tr:hover {
   }
 }
 
+.mobile-bottom-nav {
+  display: none;
+}
+
 @media (max-width: 640px) {
+  .nav-btn-desktop {
+    display: none !important;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
   }
   
   .topbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 12px 16px !important;
+    gap: 8px !important;
+  }
+
+  .topbar .brand {
+    gap: 8px !important;
+  }
+
+  .topbar .brand h1 {
+    font-size: 16px !important;
+  }
+
+  .topbar .brand p {
+    font-size: 10px !important;
+    opacity: 0.8;
+  }
+
+  .topbar .brand-mark {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 14px !important;
   }
   
   .topbar-actions {
-    justify-content: flex-start;
-    gap: 6px;
+    justify-content: flex-end !important;
+    gap: 6px !important;
   }
 
   /* Hide text labels inside topbar action buttons on mobile */
   .topbar-actions .button span,
   .topbar-actions .month-control > span {
-    display: none;
+    display: none !important;
   }
 
   .topbar-actions .button {
-    padding: 0;
-    width: 38px;
-    height: 38px;
-    justify-content: center;
+    padding: 0 !important;
+    width: 34px !important;
+    height: 34px !important;
+    justify-content: center !important;
   }
 
   .topbar-actions .month-control {
-    padding: 0 4px;
-    height: 38px;
-    gap: 0;
+    padding: 0 4px !important;
+    height: 34px !important;
+    gap: 0 !important;
   }
 
   .topbar-actions .month-control input[type="month"],
   .topbar-actions .month-control select {
-    padding: 0 4px;
-    font-size: 13px;
-    border: none;
-    background: transparent;
+    padding: 0 4px !important;
+    font-size: 12px !important;
+    border: none !important;
+    background: transparent !important;
   }
   
   .filters {
@@ -1175,6 +1204,141 @@ tbody tr:hover {
   
   .budget-list {
     grid-template-columns: 1fr;
+  }
+
+  /* Stack admin create form rows */
+  .admin-view .field-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .admin-view form div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Mobile Bottom Navigation Bar */
+  .mobile-bottom-nav {
+    display: flex !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 64px !important;
+    background: var(--surface) !important;
+    border-top: 1px solid var(--border-strong) !important;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08) !important;
+    z-index: 999 !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+
+  .mobile-tab-item {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: none !important;
+    border: none !important;
+    color: var(--muted) !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    gap: 4px !important;
+    flex: 1 !important;
+    height: 100% !important;
+    cursor: pointer !important;
+    transition: color 0.2s ease !important;
+  }
+
+  .mobile-tab-item .icon {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .mobile-tab-item.active {
+    color: var(--blue) !important;
+  }
+
+  /* Padding adjustments so fixed bottom nav doesn't cover content */
+  .workspace {
+    padding-bottom: 96px !important;
+  }
+
+  /* Responsive Table styling: Card layouts for tables */
+  .table-wrap {
+    border: none !important;
+    background: transparent !important;
+    overflow-x: visible !important;
+  }
+
+  table {
+    min-width: 100% !important;
+    display: block !important;
+  }
+
+  thead {
+    display: none !important;
+  }
+
+  tbody {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  tr {
+    display: block !important;
+    width: 100% !important;
+    border: 1px solid var(--border-strong) !important;
+    border-radius: 16px !important;
+    background: var(--surface) !important;
+    margin-bottom: 16px !important;
+    padding: 12px 16px !important;
+    box-shadow: var(--shadow-glass) !important;
+  }
+
+  td {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 1px dashed var(--border-glass) !important;
+    padding: 10px 0 !important;
+    text-align: right !important;
+    font-size: 13px !important;
+  }
+
+  td:last-child {
+    border-bottom: none !important;
+  }
+
+  td::before {
+    content: attr(data-label) !important;
+    font-weight: 700 !important;
+    color: var(--muted) !important;
+    text-transform: uppercase !important;
+    font-size: 10px !important;
+    letter-spacing: 0.05em !important;
+    text-align: left !important;
+  }
+
+  /* Align custom cells appropriately inside cards */
+  .merchant-cell, .user-cell, .row-actions {
+    text-align: right !important;
+    justify-content: flex-end !important;
+  }
+
+  .row-actions {
+    width: auto !important;
+    display: inline-flex !important;
+  }
+
+  /* Make metrics look crisp and align stack cleanly */
+  .metric strong {
+    font-size: 20px !important;
+  }
+
+  .metric strong .money-line.secondary {
+    font-size: 14px !important;
   }
 }
 

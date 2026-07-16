@@ -39,7 +39,8 @@ export const Topbar: React.FC<TopbarProps> = ({
   const prefix = isViewingOtherUser ? 'Viewing ' : '';
 
   return (
-    <header className="topbar">
+    <>
+      <header className="topbar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true" style={{ position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <img 
@@ -91,7 +92,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         </button>
 
         <button
-          className={`button button-soft ${currentView === 'dashboard' ? 'active' : ''}`}
+          className={`button button-soft nav-btn-desktop ${currentView === 'dashboard' ? 'active' : ''}`}
           id="dashboardBtn"
           type="button"
           onClick={() => onViewChange('dashboard')}
@@ -101,7 +102,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         </button>
 
         <button
-          className={`button button-soft ${currentView === 'report' ? 'active' : ''}`}
+          className={`button button-soft nav-btn-desktop ${currentView === 'report' ? 'active' : ''}`}
           id="reportBtn"
           type="button"
           onClick={() => onViewChange('report')}
@@ -112,7 +113,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
         {currentUser.role === 'admin' && (
           <button
-            className={`button button-soft ${currentView === 'admin' ? 'active' : ''}`}
+            className={`button button-soft nav-btn-desktop ${currentView === 'admin' ? 'active' : ''}`}
             id="adminBtn"
             type="button"
             onClick={() => onViewChange('admin')}
@@ -149,7 +150,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         )}
 
         <button
-          className={`button button-soft ${currentView === 'profile' ? 'active' : ''}`}
+          className={`button button-soft nav-btn-desktop ${currentView === 'profile' ? 'active' : ''}`}
           id="profileBtn"
           type="button"
           onClick={() => onViewChange(currentView === 'profile' ? 'dashboard' : 'profile')}
@@ -171,6 +172,47 @@ export const Topbar: React.FC<TopbarProps> = ({
         </button>
       </div>
     </header>
+
+    <nav className="mobile-bottom-nav">
+      <button
+        className={`mobile-tab-item ${currentView === 'dashboard' ? 'active' : ''}`}
+        type="button"
+        onClick={() => onViewChange('dashboard')}
+      >
+        <Icon name="chart" />
+        <span>Dashboard</span>
+      </button>
+
+      <button
+        className={`mobile-tab-item ${currentView === 'report' ? 'active' : ''}`}
+        type="button"
+        onClick={() => onViewChange('report')}
+      >
+        <Icon name="file-text" />
+        <span>Report</span>
+      </button>
+
+      {currentUser.role === 'admin' && (
+        <button
+          className={`mobile-tab-item ${currentView === 'admin' ? 'active' : ''}`}
+          type="button"
+          onClick={() => onViewChange('admin')}
+        >
+          <Icon name="shield" />
+          <span>Admin</span>
+        </button>
+      )}
+
+      <button
+        className={`mobile-tab-item ${currentView === 'profile' ? 'active' : ''}`}
+        type="button"
+        onClick={() => onViewChange(currentView === 'profile' ? 'dashboard' : 'profile')}
+      >
+        <Icon name="user" />
+        <span>Profile</span>
+      </button>
+    </nav>
+  </>
   );
 };
 export default Topbar;

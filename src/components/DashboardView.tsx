@@ -502,7 +502,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <tbody id="transactionBody">
                     {filteredTransactions.map((t) => (
                       <tr key={t.id} style={{ background: t.reconciled ? 'rgba(24, 114, 104, 0.04)' : undefined }}>
-                        <td style={{ paddingLeft: '16px', paddingRight: '0' }}>
+                        <td data-label="Select" style={{ paddingLeft: '16px', paddingRight: '0' }}>
                           <input
                             type="checkbox"
                             checked={selectedIds.includes(t.id)}

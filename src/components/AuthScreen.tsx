@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { User } from '../types';
-import { hashPassword, createId } from '../utils';
+import { hashPassword } from '../utils';
 import { dbService } from '../dbService';
 import Icon from './Icon';
 
@@ -11,27 +11,19 @@ interface AuthScreenProps {
   sessionExpired?: boolean;
 }
 
-const SECURITY_QUESTIONS = [
-  "What was the name of your first pet?",
-  "What is your mother's maiden name?",
-  "In what city were you born?",
-  "What was the name of your first school?",
-  "What is your favorite book or movie?"
-];
-
-export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreateUser, sessionExpired }) => {
-  const isDbEmpty = users.length === 0;
-
-  // Modes: 'signin' | 'create' | 'forgot'
-  const [authMode, setAuthMode] = useState<'signin' | 'create' | 'forgot'>(isDbEmpty ? 'create' : 'signin');
+export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionExpired }) => {
+  // Modes: 'signin' | 'forgot'
+  const [authMode, setAuthMode] = useState<'signin' | 'forgot'>('signin');
   
   // Signin & signup fields
-  const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
+  const [securityQuestion, setSecurityQuestion] = useState('');
   const [securityAnswer, setSecurityAnswer] = useState('');
+
+  // Find matched user dynamically based on entered username
+  const cleanUsername = username.trim().toLowerCase();
+  const matchedUser = users.find((u) => u.username === cleanUsername);
 
   // Password recovery sub-flow states
   const [recoveryStep, setRecoveryStep] = useState<1 | 2 | 3>(1);
@@ -60,7 +52,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
         setAlertModal({
           show: true,
           title: 'Database Empty',
-          text: 'No accounts exist yet. Please refresh the page and configure the administrator.',
+          text: 'No accounts exist yet. Please restart or check configuration.',
           tone: 'error'
         });
         return;
@@ -87,81 +79,74 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
         return;
       }
 
-      const passwordHash = await hashPassword(cleanUsername, password);
-      if (user.passwordHash !== passwordHash) {
-        setAlertModal({
-          show: true,
-          title: 'Access Denied',
-          text: 'The password you entered is incorrect.',
-          tone: 'error'
-        });
-        return;
+      // Check security question configuration
+      if (!user.securityQuestion) {
+        if (!securityQuestion.trim() || !securityAnswer.trim()) {
+          setAlertModal({
+            show: true,
+            title: 'Security Setup Required',
+            text: 'Please configure your security question and answer to continue.',
+            tone: 'error'
+          });
+          return;
+        }
+
+        // Verify password first before saving security details
+        const passwordHash = await hashPassword(cleanUsername, password);
+        if (user.passwordHash !== passwordHash) {
+          setAlertModal({
+            show: true,
+            title: 'Access Denied',
+            text: 'The password you entered is incorrect.',
+            tone: 'error'
+          });
+          return;
+        }
+
+        // Save security question/answer to DB
+        const answerHash = await hashPassword(cleanUsername, securityAnswer.trim().toLowerCase());
+        const updatedUser: User = {
+          ...user,
+          securityQuestion: securityQuestion.trim(),
+          securityAnswerHash: answerHash
+        };
+        await dbService.saveUser(updatedUser);
+      } else {
+        if (!securityAnswer.trim()) {
+          setAlertModal({
+            show: true,
+            title: 'Security Verification Required',
+            text: 'Please answer your security recovery question.',
+            tone: 'error'
+          });
+          return;
+        }
+
+        const answerHash = await hashPassword(cleanUsername, securityAnswer.trim().toLowerCase());
+        if (user.securityAnswerHash !== answerHash) {
+          setAlertModal({
+            show: true,
+            title: 'Security Verification Failed',
+            text: 'The answer to your security question is incorrect.',
+            tone: 'error'
+          });
+          return;
+        }
+
+        // Verify password
+        const passwordHash = await hashPassword(cleanUsername, password);
+        if (user.passwordHash !== passwordHash) {
+          setAlertModal({
+            show: true,
+            title: 'Access Denied',
+            text: 'The password you entered is incorrect.',
+            tone: 'error'
+          });
+          return;
+        }
       }
 
       onLogin(user.id);
-    } else if (authMode === 'create') {
-      if (!isDbEmpty) {
-        setAlertModal({
-          show: true,
-          title: 'Signup Restricted',
-          text: 'Public registration is disabled. Please contact your administrator.',
-          tone: 'error'
-        });
-        return;
-      }
-
-      if (!name.trim()) {
-        setAlertModal({
-          show: true,
-          title: 'Validation Error',
-          text: 'Please enter your full name.',
-          tone: 'error'
-        });
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        setAlertModal({
-          show: true,
-          title: 'Password Mismatch',
-          text: 'Your passwords do not match.',
-          tone: 'error'
-        });
-        return;
-      }
-
-      if (!securityAnswer.trim()) {
-        setAlertModal({
-          show: true,
-          title: 'Validation Error',
-          text: 'Please answer the security recovery question.',
-          tone: 'error'
-        });
-        return;
-      }
-
-      const passwordHash = await hashPassword(cleanUsername, password);
-      const answerHash = await hashPassword(cleanUsername, securityAnswer.trim().toLowerCase());
-
-      const newUser: User = {
-        id: createId(),
-        name: name.trim(),
-        username: cleanUsername,
-        role: 'admin', // The bootstrapped user is always an admin
-        passwordHash,
-        securityQuestion,
-        securityAnswerHash: answerHash,
-        createdAt: new Date().toISOString()
-      };
-
-      onCreateUser(newUser);
-      setAlertModal({
-        show: true,
-        title: 'Admin Created',
-        text: 'The primary administrator account was successfully set up.',
-        tone: 'success'
-      });
-      onLogin(newUser.id);
     }
   };
 
@@ -375,22 +360,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
             </div>
             <h1>Qashly</h1>
             <p id="authSubtitle">
-              {isDbEmpty
-                ? 'Create the primary administrator account'
-                : authMode === 'forgot'
+              {authMode === 'forgot'
                 ? 'Recover your account password'
                 : 'Sign in to your monthly workspace'}
             </p>
           </div>
 
-          {/* Show tab switch headers only if DB is empty (registration is bootstrap only) */}
-          {isDbEmpty && (
-            <div className="segmented auth-tabs" aria-label="Authentication mode">
-              <button className="segment active" type="button">
-                Create Admin Account
-              </button>
-            </div>
-          )}
+          {null}
 
           {sessionExpired && authMode !== 'forgot' && (
             <div style={{
@@ -412,23 +388,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
           {/* Standard Authentication forms */}
           {authMode !== 'forgot' && (
             <form onSubmit={handleAuthSubmit} className="entry-form">
-              {authMode === 'create' && (
-                <>
-                  <label className="field" htmlFor="nameInput">
-                    <span>Full name</span>
-                    <input
-                      id="nameInput"
-                      type="text"
-                      maxLength={64}
-                      placeholder="Your name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      required
-                    />
-                  </label>
-                </>
-              )}
-
               <label className="field" htmlFor="usernameInput">
                 <span>Username</span>
                 <input
@@ -442,65 +401,41 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
                 />
               </label>
 
-              <label className="field" htmlFor="passwordInput">
-                <span>Password</span>
-                <input
-                  id="passwordInput"
-                  type="password"
-                  autoComplete={authMode === 'create' ? 'new-password' : 'current-password'}
-                  minLength={4}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </label>
-
-              {authMode === 'create' && (
+              {matchedUser && (
                 <>
-                  <label className="field" htmlFor="confirmPasswordInput">
-                    <span>Confirm password</span>
-                    <input
-                      id="confirmPasswordInput"
-                      type="password"
-                      autoComplete="new-password"
-                      minLength={4}
-                      placeholder="Repeat password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                    />
-                  </label>
-
-                  <label className="field" htmlFor="securityQuestionSelect">
-                    <span>Security Recovery Question</span>
-                    <select
-                      id="securityQuestionSelect"
-                      value={securityQuestion}
-                      onChange={(e) => setSecurityQuestion(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        background: 'var(--field)',
-                        border: '1px solid var(--border-glass)',
-                        borderRadius: '8px',
-                        color: 'var(--text)',
-                        fontSize: '14px',
-                        outline: 'none'
-                      }}
-                    >
-                      {SECURITY_QUESTIONS.map((q) => (
-                        <option key={q} value={q}>{q}</option>
-                      ))}
-                    </select>
-                  </label>
+                  {!matchedUser.securityQuestion ? (
+                    <label className="field" htmlFor="securityQuestionInput">
+                      <span>Type a Security Question</span>
+                      <input
+                        id="securityQuestionInput"
+                        type="text"
+                        placeholder="e.g., What was the name of your first pet?"
+                        value={securityQuestion}
+                        onChange={(e) => setSecurityQuestion(e.target.value)}
+                        required
+                      />
+                    </label>
+                  ) : (
+                    <div style={{
+                      padding: '12px 14px',
+                      background: 'var(--surface-muted)',
+                      border: '1px solid var(--border-glass)',
+                      borderRadius: '8px',
+                      marginBottom: '12px',
+                      fontSize: '13px',
+                      color: 'var(--text)',
+                      fontWeight: 500
+                    }}>
+                      ❓ <strong>Security Question:</strong> {matchedUser.securityQuestion}
+                    </div>
+                  )}
 
                   <label className="field" htmlFor="securityAnswerInput">
-                    <span>Answer to Recovery Question</span>
+                    <span>{matchedUser.securityQuestion ? 'Answer to Security Question' : 'Set Answer to Security Question'}</span>
                     <input
                       id="securityAnswerInput"
                       type="text"
-                      placeholder="Answer"
+                      placeholder="Your answer"
                       value={securityAnswer}
                       onChange={(e) => setSecurityAnswer(e.target.value)}
                       required
@@ -509,13 +444,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
                 </>
               )}
 
+              <label className="field" htmlFor="passwordInput">
+                <span>Password</span>
+                <input
+                  id="passwordInput"
+                  type="password"
+                  autoComplete="current-password"
+                  minLength={4}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </label>
+
               <button
                 className="button button-primary"
                 type="submit"
                 style={{ marginTop: '8px' }}
               >
                 <Icon name="user" />
-                <span>{authMode === 'create' ? 'Create Admin Account' : 'Sign in'}</span>
+                <span>Sign in</span>
               </button>
 
               {authMode === 'signin' && (
