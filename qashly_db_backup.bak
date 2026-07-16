@@ -1,8 +1,8 @@
 -- ==========================================
--- LEDGERLY DATABASE DUMP BACKUP (.BAK)
+-- QASHLY DATABASE DUMP BACKUP (.BAK)
 -- Generated: 2026-07-06
 -- Target DBMS: PostgreSQL (12+)
--- Database: ledgerly_workspace_db
+-- Database: qashly_workspace_db
 -- ==========================================
 
 SET statement_timeout = 0;
@@ -105,7 +105,7 @@ VALUES (
     'admin',
     'b90707af3eb863de0f8e8a04156c279fbb8fee53eae979b9e40a2261fe42f6e9',
     'What is the name of your organization?',
-    '32ec8f4b3874a25e311cd656b0060513440ffcbb11d4137642e14dd17270ca44',
+    'b08b754291965a5e5d69ab21eaa8268a8baffe7a6d2ff9f0ce036978c359b292',
     CURRENT_TIMESTAMP
 ) ON CONFLICT (username) DO NOTHING;
 

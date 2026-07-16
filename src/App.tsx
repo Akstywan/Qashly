@@ -112,7 +112,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     const initLoad = async () => {
       try {
-        const STORAGE_KEY_STR = "ledgerly-expense-tracker-v3";
+        const STORAGE_KEY_STR = "qashly-expense-tracker-v3";
         const raw = localStorage.getItem(STORAGE_KEY_STR);
 
         // Fetch users from database (Supabase / localStorage fallback)
@@ -156,7 +156,7 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (!isLoaded) return;
     try {
-      const STORAGE_KEY_STR = "ledgerly-expense-tracker-v3";
+      const STORAGE_KEY_STR = "qashly-expense-tracker-v3";
       const stateToSave = {
         currentUserId,
         month,
@@ -370,7 +370,7 @@ export const App: React.FC = () => {
             csvContent += `${t.date},"${t.merchant.replace(/"/g, '""')}",${t.type},${t.currency},${t.amount},${t.category},"${(t.account || '').replace(/"/g, '""')}",${t.reconciled ? 'Yes' : 'No'},"${(t.notes || '').replace(/"/g, '""')}"\n`;
           });
 
-          downloadFile(csvContent, `ledgerly-${activeUser.name.replace(/\s+/g, '-').toLowerCase()}-${month}.csv`);
+          downloadFile(csvContent, `qashly-${activeUser.name.replace(/\s+/g, '-').toLowerCase()}-${month}.csv`);
         } else if (rangeType === 'full') {
           csvContent += `COMPLETE ACCOUNT HISTORY - EXPORTED ON ${new Date().toLocaleDateString()}\n\n`;
 
@@ -400,7 +400,7 @@ export const App: React.FC = () => {
             csvContent += `${t.date},"${t.merchant.replace(/"/g, '""')}",${t.type},${t.currency},${t.amount},${t.category},"${(t.account || '').replace(/"/g, '""')}",${t.reconciled ? 'Yes' : 'No'},"${(t.notes || '').replace(/"/g, '""')}"\n`;
           });
 
-          downloadFile(csvContent, `ledgerly-${activeUser.name.replace(/\s+/g, '-').toLowerCase()}-full-history.csv`);
+          downloadFile(csvContent, `qashly-${activeUser.name.replace(/\s+/g, '-').toLowerCase()}-full-history.csv`);
         }
       },
       onCancel: () => {

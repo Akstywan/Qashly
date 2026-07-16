@@ -48,10 +48,10 @@ export const Topbar: React.FC<TopbarProps> = ({
             style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', top: 0, left: 0 }}
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
-          <span style={{ position: 'relative', zIndex: 1 }}>L</span>
+          <span style={{ position: 'relative', zIndex: 1 }}>Q</span>
         </div>
         <div>
-          <h1>Ledgerly</h1>
+          <h1>Qashly</h1>
           <p id="monthTitle">{`${formatMonthLabel(month)} - ${userDisplayName}`}</p>
         </div>
       </div>

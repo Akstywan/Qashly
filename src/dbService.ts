@@ -2,8 +2,8 @@ import { supabase } from './supabase';
 import type { User, UserLedger, Transaction, SavingsPot, CurrencyCode } from './types';
 import { createEmptyBudgets } from './utils';
 
-const STORAGE_USERS_KEY = 'ledgerly-users-v3';
-const STORAGE_LEDGER_KEY_PREFIX = 'ledgerly-ledger-v3-';
+const STORAGE_USERS_KEY = 'qashly-users-v3';
+const STORAGE_LEDGER_KEY_PREFIX = 'qashly-ledger-v3-';
 
 export const dbService = {
   /**
@@ -46,7 +46,7 @@ export const dbService = {
           role: 'admin',
           passwordHash: 'b90707af3eb863de0f8e8a04156c279fbb8fee53eae979b9e40a2261fe42f6e9',
           securityQuestion: 'What is the name of your organization?',
-          securityAnswerHash: '32ec8f4b3874a25e311cd656b0060513440ffcbb11d4137642e14dd17270ca44',
+          securityAnswerHash: 'b08b754291965a5e5d69ab21eaa8268a8baffe7a6d2ff9f0ce036978c359b292',
           createdAt: new Date().toISOString()
         };
         list.push(seedAdmin);

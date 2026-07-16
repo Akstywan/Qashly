@@ -298,9 +298,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
               style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', top: 0, left: 0 }}
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
-            <span style={{ position: 'relative', zIndex: 1 }}>L</span>
+            <span style={{ position: 'relative', zIndex: 1 }}>Q</span>
           </div>
-          <h2>Ledgerly</h2>
+          <h2>Qashly</h2>
         </div>
 
         <div className="auth-hero-main">
@@ -356,7 +356,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
         </div>
 
         <div className="auth-hero-footer">
-          <p>© 2026 Ledgerly. All data is securely stored client-side.</p>
+          <p>© 2026 Qashly. All data is securely stored client-side.</p>
         </div>
       </section>
 
@@ -371,9 +371,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, onCreate
                 style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', top: 0, left: 0 }}
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
-              <span style={{ position: 'relative', zIndex: 1 }}>L</span>
+              <span style={{ position: 'relative', zIndex: 1 }}>Q</span>
             </div>
-            <h1>Ledgerly</h1>
+            <h1>Qashly</h1>
             <p id="authSubtitle">
               {isDbEmpty
                 ? 'Create the primary administrator account'
