@@ -1260,6 +1260,10 @@ tbody tr:hover {
     color: var(--blue) !important;
   }
 
+  .mobile-tab-item svg {
+    stroke: currentColor !important;
+  }
+
   /* Padding adjustments so fixed bottom nav doesn't cover content */
   .workspace {
     padding-bottom: 96px !important;
