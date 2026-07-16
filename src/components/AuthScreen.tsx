@@ -45,7 +45,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
     const cleanUsername = username.trim().toLowerCase();
 
     // Fetch latest users database status
-    const latestUsers = await dbService.getUsers();
+    let latestUsers;
+    try {
+      latestUsers = await dbService.getUsers();
+    } catch (err: any) {
+      setAlertModal({
+        show: true,
+        title: 'Database Connection Error',
+        text: `Failed to fetch users from database: ${err.message || err.details || JSON.stringify(err)}. Please check your internet connection and .env configuration.`,
+        tone: 'error'
+      });
+      return;
+    }
 
     if (authMode === 'signin') {
       if (latestUsers.length === 0) {

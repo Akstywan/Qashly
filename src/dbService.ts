@@ -12,7 +12,11 @@ export const dbService = {
       .select('*');
     if (error) {
       console.error('Supabase getUsers error:', error);
+<<<<<<< HEAD
       return [];
+=======
+      throw error;
+>>>>>>> 846988f (DB CHANGES)
     }
 
     let list: User[] = (data || []).map((u: any) => ({
