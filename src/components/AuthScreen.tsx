@@ -19,6 +19,14 @@ const SECURITY_QUESTIONS = [
   "What is your favorite book or movie?"
 ];
 
+const SECURITY_QUESTIONS = [
+  "What was the name of your first pet?",
+  "What is your mother's maiden name?",
+  "In what city were you born?",
+  "What was the name of your first school?",
+  "What is your favorite book or movie?"
+];
+
 export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionExpired }) => {
   // Modes: 'signin' | 'forgot'
   const [authMode, setAuthMode] = useState<'signin' | 'forgot'>('signin');
@@ -26,6 +34,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
   // Signin & signup fields
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityAnswer, setSecurityAnswer] = useState('');
 
@@ -131,27 +140,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
         };
         await dbService.saveUser(updatedUser);
       } else {
-        if (!securityAnswer.trim()) {
-          setAlertModal({
-            show: true,
-            title: 'Security Verification Required',
-            text: 'Please answer your security recovery question.',
-            tone: 'error'
-          });
-          return;
-        }
-
-        const answerHash = await hashPassword(cleanUsername, securityAnswer.trim().toLowerCase());
-        if (user.securityAnswerHash !== answerHash) {
-          setAlertModal({
-            show: true,
-            title: 'Security Verification Failed',
-            text: 'The answer to your security question is incorrect.',
-            tone: 'error'
-          });
-          return;
-        }
-
         // Verify password
         const passwordHash = await hashPassword(cleanUsername, password);
         if (user.passwordHash !== passwordHash) {
@@ -420,48 +408,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
                 />
               </label>
 
-              {matchedUser && (
+              {matchedUser && !matchedUser.securityQuestion && (
                 <>
-                  {!matchedUser.securityQuestion ? (
-                    <label className="field" htmlFor="securityQuestionSelect">
-                      <span>Choose a Security Question</span>
-                      <select
-                        id="securityQuestionSelect"
-                        value={securityQuestion}
-                        onChange={(e) => setSecurityQuestion(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '10px 14px',
-                          background: 'var(--field)',
-                          border: '1px solid var(--border-glass)',
-                          borderRadius: '8px',
-                          color: 'var(--text)',
-                          fontSize: '14px',
-                          outline: 'none'
-                        }}
-                      >
-                        {SECURITY_QUESTIONS.map((q) => (
-                          <option key={q} value={q}>{q}</option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : (
-                    <div style={{
-                      padding: '12px 14px',
-                      background: 'var(--surface-muted)',
-                      border: '1px solid var(--border-glass)',
-                      borderRadius: '8px',
-                      marginBottom: '12px',
-                      fontSize: '13px',
-                      color: 'var(--text)',
-                      fontWeight: 500
-                    }}>
-                      ❓ <strong>Security Question:</strong> {matchedUser.securityQuestion}
-                    </div>
-                  )}
+                  <label className="field" htmlFor="securityQuestionSelect">
+                    <span>Choose a Security Question</span>
+                    <select
+                      id="securityQuestionSelect"
+                      value={securityQuestion}
+                      onChange={(e) => setSecurityQuestion(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        background: 'var(--field)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '8px',
+                        color: 'var(--text)',
+                        fontSize: '14px',
+                        outline: 'none'
+                      }}
+                    >
+                      {SECURITY_QUESTIONS.map((q) => (
+                        <option key={q} value={q}>{q}</option>
+                      ))}
+                    </select>
+                  </label>
 
                   <label className="field" htmlFor="securityAnswerInput">
-                    <span>{matchedUser.securityQuestion ? 'Answer to Security Question' : 'Set Answer to Security Question'}</span>
+                    <span>Set Answer to Security Question</span>
                     <input
                       id="securityAnswerInput"
                       type="text"
