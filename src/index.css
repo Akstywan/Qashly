@@ -1173,7 +1173,7 @@ tbody tr:hover {
   }
 
   /* Hide text labels inside topbar action buttons on mobile */
-  .topbar-actions .button span,
+  .topbar-actions .button span:not(.icon),
   .topbar-actions .month-control > span {
     display: none !important;
   }
