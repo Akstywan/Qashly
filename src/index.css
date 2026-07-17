@@ -1325,6 +1325,7 @@ tbody tr:hover {
     padding: 10px 0 !important;
     text-align: right !important;
     font-size: 13px !important;
+    width: 100% !important;
   }
 
   td:last-child {
