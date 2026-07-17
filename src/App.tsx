@@ -22,7 +22,12 @@ export const App: React.FC = () => {
   const [userData, setUserData] = useState<Record<string, UserLedger>>({});
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile' | 'transactions'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile' | 'transactions'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 640) {
+      return 'transactions';
+    }
+    return 'dashboard';
+  });
   const [theme, setTheme] = useState<'light' | 'dark'>(getPreferredTheme());
   const [month, setMonth] = useState<string>(getCurrentMonthKey());
   const [transactionCurrency, setTransactionCurrency] = useState<CurrencyCode>('KWD');
@@ -307,7 +312,7 @@ export const App: React.FC = () => {
       setCurrentUserId(userId);
       setActiveUserId(userId);
       setEditingTransaction(null);
-      setCurrentView('dashboard');
+      setCurrentView(window.innerWidth <= 640 ? 'transactions' : 'dashboard');
       setLastActivity(Date.now());
       setSessionExpired(false);
     } catch (error) {
