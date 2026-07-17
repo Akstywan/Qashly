@@ -19,14 +19,6 @@ const SECURITY_QUESTIONS = [
   "What is your favorite book or movie?"
 ];
 
-const SECURITY_QUESTIONS = [
-  "What was the name of your first pet?",
-  "What is your mother's maiden name?",
-  "In what city were you born?",
-  "What was the name of your first school?",
-  "What is your favorite book or movie?"
-];
-
 export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionExpired }) => {
   // Modes: 'signin' | 'forgot'
   const [authMode, setAuthMode] = useState<'signin' | 'forgot'>('signin');
@@ -34,7 +26,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
   // Signin & signup fields
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityQuestion, setSecurityQuestion] = useState(SECURITY_QUESTIONS[0]);
   const [securityAnswer, setSecurityAnswer] = useState('');
 
@@ -102,6 +93,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
           show: true,
           title: 'Account Not Found',
           text: 'No account was found with that username.',
+          tone: 'error'
+        });
+        return;
+      }
+
+      if (user.isFrozen) {
+        setAlertModal({
+          show: true,
+          title: 'Account Frozen',
+          text: 'This account has been frozen. Please contact your administrator.',
           tone: 'error'
         });
         return;

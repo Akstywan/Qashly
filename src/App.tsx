@@ -245,6 +245,16 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateUser = async (updatedUser: User) => {
+    try {
+      await dbService.saveUser(updatedUser);
+      setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+    } catch (error) {
+      showCustomAlert('Database Error', 'Could not update user profile in the database.', 'error');
+      throw error;
+    }
+  };
+
   const handleLogin = async (userId: string) => {
     try {
       const ledger = await dbService.getUserLedger(userId);
@@ -747,8 +757,12 @@ export const App: React.FC = () => {
             onExport={handleExport}
             onClear={handleClear}
           />
-          <main className={`workspace ${currentView !== 'dashboard' ? 'admin-mode' : ''}`}>
-            {currentView === 'dashboard' && (
+          <main className={`workspace ${
+            currentView !== 'dashboard' || !(currentUser?.permissions?.transactions ?? true)
+              ? 'admin-mode'
+              : ''
+          }`}>
+            {currentView === 'dashboard' && (currentUser?.permissions?.transactions ?? true) && (
               <EntryPanel
                 month={month}
                 editingTransaction={editingTransaction}
@@ -774,6 +788,7 @@ export const App: React.FC = () => {
                 onBulkDeleteTransactions={handleBulkDeleteTransactions}
                 onBulkUpdateTransactions={handleBulkUpdateTransactions}
                 theme={theme}
+                permissions={currentUser?.permissions}
               />
             ) : currentView === 'report' ? (
               <ReportView
@@ -790,10 +805,10 @@ export const App: React.FC = () => {
             ) : (
               <AdminView
                 users={users}
-                userData={userData}
                 onOpenUserLedger={handleOpenUserLedger}
                 onResetUserLedger={handleResetUserLedger}
                 onCreateUser={handleCreateUser}
+                onUpdateUser={handleUpdateUser}
               />
             )}
           </main>
