@@ -238,16 +238,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Charts & Budgets Panel */}
-        <div className={`insight-grid ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
+        <div className="insight-grid" style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
           <Charts
             transactions={monthTransactions}
             dashboardCurrency={dashboardCurrency}
             theme={theme}
+            hideOnMobile={showOnlyTransactionsOnMobile}
           />
 
           {/* Budgets Panel */}
           {window.location && (permissions?.budgets ?? true) && (
-            <section className="panel budget-panel" aria-label="Budgets">
+            <section className={`panel budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Budgets">
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Limits</span>

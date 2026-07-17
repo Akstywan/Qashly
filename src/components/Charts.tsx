@@ -6,6 +6,7 @@ interface ChartsProps {
   transactions: Transaction[];
   dashboardCurrency: CurrencyCode;
   theme: 'light' | 'dark';
+  hideOnMobile?: boolean;
 }
 
 interface CategoryTotal {
@@ -13,7 +14,7 @@ interface CategoryTotal {
   total: number;
 }
 
-export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency, theme }) => {
+export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency, theme, hideOnMobile }) => {
   const categoryCanvasRef = useRef<HTMLCanvasElement>(null);
   const cashflowCanvasRef = useRef<HTMLCanvasElement>(null);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
@@ -304,7 +305,7 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
     const { ctx, width, height } = prepareCanvas(canvas);
     const weeks = getWeeklyCashflow();
     const maxValue = Math.max(1, ...weeks.flatMap((week) => [week.income, week.expense]));
-    const padding = { top: 20, right: 12, bottom: 42, left: 88 };
+    const padding = { top: 40, right: 12, bottom: 42, left: 88 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     const baseline = padding.top + chartHeight;
@@ -360,7 +361,7 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
 
   return (
     <>
-      <section className="panel chart-panel" aria-label="Spending by category">
+      <section className={`panel chart-panel ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Spending by category">
         <div className="panel-heading">
           <div>
             <span className="eyebrow">Categories</span>
@@ -389,7 +390,7 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
         </div>
       </section>
 
-      <section className="panel chart-panel" aria-label="Monthly cashflow">
+      <section className={`panel chart-panel ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Monthly cashflow">
         <div className="panel-heading">
           <div>
             <span className="eyebrow">Cashflow</span>
