@@ -343,18 +343,7 @@ export const App: React.FC = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
-  const handleOpenUserLedger = async (userId: string) => {
-    try {
-      const ledger = await dbService.getUserLedger(userId);
-      setUserData((prev) => ({ ...prev, [userId]: ledger }));
 
-      setActiveUserId(userId);
-      setEditingTransaction(null);
-      setCurrentView('dashboard');
-    } catch (error) {
-      console.error('Failed to fetch user ledger data', error);
-    }
-  };
 
   const handleResetUserLedger = async (userId: string) => {
     const user = users.find((u) => u.id === userId);
@@ -884,7 +873,6 @@ export const App: React.FC = () => {
             ) : (
               <AdminView
                 users={users}
-                onOpenUserLedger={handleOpenUserLedger}
                 onResetUserLedger={handleResetUserLedger}
                 onCreateUser={handleCreateUser}
                 onUpdateUser={handleUpdateUser}

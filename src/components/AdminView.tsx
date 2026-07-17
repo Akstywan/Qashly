@@ -5,7 +5,6 @@ import Icon from './Icon';
 
 interface AdminViewProps {
   users: User[];
-  onOpenUserLedger: (userId: string) => void;
   onResetUserLedger: (userId: string) => void;
   onCreateUser: (user: User) => Promise<void>;
   onUpdateUser: (user: User) => Promise<void>;
@@ -13,7 +12,6 @@ interface AdminViewProps {
 
 export const AdminView: React.FC<AdminViewProps> = ({
   users,
-  onOpenUserLedger,
   onResetUserLedger,
   onCreateUser,
   onUpdateUser
@@ -383,15 +381,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </td>
                       <td data-label="Actions" className="action-cell">
                         <div className="row-actions">
-                          <button
-                            className="icon-button"
-                            type="button"
-                            onClick={() => onOpenUserLedger(user.id)}
-                            title="Open ledger"
-                            aria-label="Open ledger"
-                          >
-                            <Icon name="chart" />
-                          </button>
                           <button
                             className="icon-button danger"
                             type="button"
