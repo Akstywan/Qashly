@@ -26,6 +26,11 @@ interface DashboardViewProps {
   onBulkDeleteTransactions: (ids: string[]) => void;
   onBulkUpdateTransactions: (ids: string[], updates: Partial<Transaction>) => void;
   theme: 'light' | 'dark';
+  permissions?: {
+    savingsPots: boolean;
+    budgets: boolean;
+    transactions: boolean;
+  };
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -41,7 +46,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onAdjustSavingsBalance,
   onBulkDeleteTransactions,
   onBulkUpdateTransactions,
-  theme
+  theme,
+  permissions
 }) => {
   // Local filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -228,7 +234,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Charts & Budgets Panel */}
-        <div className="insight-grid">
+        <div className="insight-grid" style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
           <Charts
             transactions={monthTransactions}
             dashboardCurrency={dashboardCurrency}
@@ -236,7 +242,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           />
 
           {/* Budgets Panel */}
-          <section className="panel budget-panel" aria-label="Budgets">
+          {window.location && (permissions?.budgets ?? true) && (
+            <section className="panel budget-panel" aria-label="Budgets">
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Limits</span>
@@ -301,15 +308,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               })}
             </div>
           </section>
+          )}
 
           {/* Savings Pots Panel */}
-          <SavingsPots
-            savingsPots={savingsPots}
-            onAddPot={onAddSavingsPot}
-            onDeletePot={onDeleteSavingsPot}
-            onAdjustBalance={onAdjustSavingsBalance}
-            dashboardCurrency={dashboardCurrency}
-          />
+          {(permissions?.savingsPots ?? true) && (
+            <SavingsPots
+              savingsPots={savingsPots}
+              onAddPot={onAddSavingsPot}
+              onDeletePot={onDeleteSavingsPot}
+              onAdjustBalance={onAdjustSavingsBalance}
+              dashboardCurrency={dashboardCurrency}
+            />
+          )}
 
 
           {/* Transactions Register */}
@@ -379,7 +389,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Bulk Actions Toolbar (Sleek checked item manager) */}
-            {selectedIds.length > 0 && (
+            {selectedIds.length > 0 && (permissions?.transactions ?? true) && (
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -483,33 +493,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <table>
                   <thead>
                     <tr>
-                      <th style={{ width: '40px', paddingLeft: '16px', paddingRight: '0' }}>
-                        <input
-                          type="checkbox"
-                          checked={isAllSelected}
-                          onChange={handleToggleSelectAll}
-                          aria-label="Select all transactions"
-                        />
-                      </th>
+                      {(permissions?.transactions ?? true) && (
+                        <th style={{ width: '40px', paddingLeft: '16px', paddingRight: '0' }}>
+                          <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            onChange={handleToggleSelectAll}
+                            aria-label="Select all transactions"
+                          />
+                        </th>
+                      )}
                       <th>Date</th>
                       <th>Details</th>
                       <th>Category</th>
                       <th>Account / Method</th>
                       <th className="amount-cell">Amount</th>
-                      <th className="action-cell">Actions</th>
+                      {(permissions?.transactions ?? true) && <th className="action-cell">Actions</th>}
                     </tr>
                   </thead>
                   <tbody id="transactionBody">
                     {filteredTransactions.map((t) => (
                       <tr key={t.id} style={{ background: t.reconciled ? 'rgba(24, 114, 104, 0.04)' : undefined }}>
-                        <td data-label="Select" style={{ paddingLeft: '16px', paddingRight: '0' }}>
-                          <input
-                            type="checkbox"
-                            checked={selectedIds.includes(t.id)}
-                            onChange={() => handleToggleSelectRow(t.id)}
-                            aria-label={`Select transaction ${t.merchant}`}
-                          />
-                        </td>
+                        {(permissions?.transactions ?? true) && (
+                          <td data-label="Select" style={{ paddingLeft: '16px', paddingRight: '0' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.includes(t.id)}
+                              onChange={() => handleToggleSelectRow(t.id)}
+                              aria-label={`Select transaction ${t.merchant}`}
+                            />
+                          </td>
+                        )}
                         <td data-label="Date">{formatShortDate(t.date)}</td>
                         <td data-label="Details">
                           <div className="merchant-cell">
@@ -552,28 +566,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         <td data-label="Amount" className={`amount-cell ${t.type}`}>
                           {`${t.type === 'expense' ? '-' : '+'}${formatMoney(t.amount, t.currency)}`}
                         </td>
-                        <td data-label="Actions" className="action-cell">
-                          <div className="row-actions">
-                            <button
-                              className="icon-button"
-                              type="button"
-                              onClick={() => onEditTransaction(t)}
-                              title="Edit transaction"
-                              aria-label="Edit transaction"
-                            >
-                              <Icon name="edit" />
-                            </button>
-                            <button
-                              className="icon-button danger"
-                              type="button"
-                              onClick={() => onDeleteTransaction(t.id)}
-                              title="Delete transaction"
-                              aria-label="Delete transaction"
-                            >
-                              <Icon name="trash" />
-                            </button>
-                          </div>
-                        </td>
+                        {(permissions?.transactions ?? true) && (
+                          <td data-label="Actions" className="action-cell">
+                            <div className="row-actions">
+                              <button
+                                className="icon-button"
+                                type="button"
+                                onClick={() => onEditTransaction(t)}
+                                title="Edit transaction"
+                                aria-label="Edit transaction"
+                              >
+                                <Icon name="edit" />
+                              </button>
+                              <button
+                                className="icon-button danger"
+                                type="button"
+                                onClick={() => onDeleteTransaction(t.id)}
+                                title="Delete transaction"
+                                aria-label="Delete transaction"
+                              >
+                                <Icon name="trash" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

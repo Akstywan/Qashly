@@ -24,6 +24,12 @@ export const dbService = {
       securityQuestion: u.security_question || '',
       securityAnswerHash: u.security_answer_hash || '',
       createdAt: u.created_at,
+      isFrozen: !!u.is_frozen,
+      permissions: u.permissions || {
+        savingsPots: true,
+        budgets: true,
+        transactions: true,
+      },
     }));
 
     if (list.length === 0 || !list.some((u) => u.username === 'admin')) {
@@ -49,6 +55,12 @@ export const dbService = {
           security_question: '',
           security_answer_hash: '',
           created_at: seedAdmin.createdAt,
+          is_frozen: false,
+          permissions: {
+            savingsPots: true,
+            budgets: true,
+            transactions: true
+          }
         });
 
       if (!seedError) {
@@ -77,6 +89,12 @@ export const dbService = {
         security_question: user.securityQuestion || '',
         security_answer_hash: user.securityAnswerHash || '',
         created_at: user.createdAt,
+        is_frozen: !!user.isFrozen,
+        permissions: user.permissions || {
+          savingsPots: true,
+          budgets: true,
+          transactions: true
+        }
       });
     if (error) {
       console.error('Supabase saveUser error:', error);

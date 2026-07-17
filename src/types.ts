@@ -7,6 +7,12 @@ export interface User {
   createdAt: string;
   securityQuestion?: string;
   securityAnswerHash?: string;
+  isFrozen?: boolean;
+  permissions?: {
+    savingsPots: boolean;
+    budgets: boolean;
+    transactions: boolean;
+  };
 }
 
 export type TransactionType = 'expense' | 'income';

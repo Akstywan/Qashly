@@ -1,24 +1,22 @@
 import React, { useState } from 'react';
-import type { User, UserLedger } from '../types';
-import { formatMoney, hashPassword, createId } from '../utils';
+import type { User } from '../types';
+import { hashPassword, createId } from '../utils';
 import Icon from './Icon';
 
 interface AdminViewProps {
   users: User[];
-  userData: Record<string, UserLedger>;
   onOpenUserLedger: (userId: string) => void;
   onResetUserLedger: (userId: string) => void;
   onCreateUser: (user: User) => Promise<void>;
+  onUpdateUser: (user: User) => Promise<void>;
 }
-
-
 
 export const AdminView: React.FC<AdminViewProps> = ({
   users,
-  userData,
   onOpenUserLedger,
   onResetUserLedger,
-  onCreateUser
+  onCreateUser,
+  onUpdateUser
 }) => {
   // Local state for Create User form
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -27,7 +25,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'admin' | 'user'>('user');
 
-  
   // Reusable custom premium alert modal popup state
   const [alertModal, setAlertModal] = useState<{
     show: boolean;
@@ -37,60 +34,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
   }>({ show: false, title: '', text: '', tone: 'info' });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Aggregate system-wide metrics
-  const getSystemTotals = () => {
-    const income = { KWD: 0, INR: 0 };
-    const expense = { KWD: 0, INR: 0 };
-    let transactionCount = 0;
-
-    users.forEach((user) => {
-      const ledger = userData[user.id] || { transactions: [], budgets: {} };
-      transactionCount += ledger.transactions.length;
-
-      ledger.transactions.forEach((t) => {
-        if (t.type === 'income') {
-          income[t.currency] += t.amount;
-        } else {
-          expense[t.currency] += t.amount;
-        }
-      });
-    });
-
-    return { income, expense, transactionCount };
-  };
-
-  const { income: sysIncome, expense: sysExpense, transactionCount: sysTxCount } = getSystemTotals();
-
-  // Render money stack helper
-  const renderMoneyStack = (totals: { KWD: number; INR: number }) => {
-    return (
-      <>
-        <span className="money-line">{formatMoney(totals.KWD, 'KWD')}</span>
-        <span className="money-line secondary">{formatMoney(totals.INR, 'INR')}</span>
-      </>
-    );
-  };
-
-  // Get user-specific metrics
-  const getUserMetrics = (userId: string) => {
-    const ledger = userData[userId] || { transactions: [] };
-    const txCount = ledger.transactions.length;
-    const totals = {
-      income: { KWD: 0, INR: 0 },
-      expense: { KWD: 0, INR: 0 }
-    };
-
-    ledger.transactions.forEach((t) => {
-      if (t.type === 'income') {
-        totals.income[t.currency] += t.amount;
-      } else {
-        totals.expense[t.currency] += t.amount;
-      }
-    });
-
-    return { txCount, totals };
-  };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +71,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
         passwordHash,
         securityQuestion: '',
         securityAnswerHash: '',
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        isFrozen: false,
+        permissions: {
+          savingsPots: true,
+          budgets: true,
+          transactions: true
+        }
       };
 
       await onCreateUser(newUser);
@@ -142,7 +91,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       setAlertModal({
         show: true,
         title: 'User Created',
-        text: 'The new user account has been registered successfully.',
+        text: 'The new user account has been registered successfully with default permissions.',
         tone: 'success'
       });
 
@@ -159,30 +108,63 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const handleToggleFreeze = async (user: User) => {
+    const updated: User = {
+      ...user,
+      isFrozen: !user.isFrozen
+    };
+    try {
+      await onUpdateUser(updated);
+    } catch (err) {
+      setAlertModal({
+        show: true,
+        title: 'Error Updating User',
+        text: 'Could not change the frozen status. Please try again.',
+        tone: 'error'
+      });
+    }
+  };
+
+  const handleTogglePermission = async (user: User, perm: 'savingsPots' | 'budgets' | 'transactions') => {
+    const currentPerms = user.permissions || { savingsPots: true, budgets: true, transactions: true };
+    const updated: User = {
+      ...user,
+      permissions: {
+        ...currentPerms,
+        [perm]: !currentPerms[perm]
+      }
+    };
+    try {
+      await onUpdateUser(updated);
+    } catch (err) {
+      setAlertModal({
+        show: true,
+        title: 'Error Updating User',
+        text: 'Could not update the user permissions. Please try again.',
+        tone: 'error'
+      });
+    }
+  };
+
   return (
     <>
       <section className="admin-view" id="adminView" aria-label="Admin portal">
-        {/* Metric Cards Summary */}
-        <div className="summary-grid admin-summary" aria-label="Admin summary">
+        {/* Metric Cards Summary showing User Statistics */}
+        <div className="summary-grid admin-summary" aria-label="Admin summary" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           <article className="metric">
-            <span>Users</span>
+            <span>Total Users</span>
             <strong id="adminUserCount">{users.length}</strong>
-            <small>Local accounts</small>
+            <small>Registered accounts</small>
           </article>
           <article className="metric">
-            <span>Transactions</span>
-            <strong id="adminTransactionCount">{sysTxCount}</strong>
-            <small>All users</small>
+            <span>Active Users</span>
+            <strong id="adminActiveCount">{users.filter((u) => !u.isFrozen).length}</strong>
+            <small>Access enabled</small>
           </article>
           <article className="metric">
-            <span>Total income</span>
-            <strong id="adminIncomeValue">{renderMoneyStack(sysIncome)}</strong>
-            <small>KWD and INR</small>
-          </article>
-          <article className="metric">
-            <span>Total spending</span>
-            <strong id="adminExpenseValue">{renderMoneyStack(sysExpense)}</strong>
-            <small>KWD and INR</small>
+            <span>Frozen Users</span>
+            <strong id="adminFrozenCount">{users.filter((u) => u.isFrozen).length}</strong>
+            <small>Access suspended</small>
           </article>
         </div>
 
@@ -268,7 +250,6 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 </label>
               </div>
 
-
               <button
                 className="button button-primary"
                 type="submit"
@@ -312,15 +293,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
                 <tr>
                   <th>User</th>
                   <th>Role</th>
-                  <th>Transactions</th>
-                  <th>Income</th>
-                  <th>Spending</th>
+                  <th>Status</th>
+                  <th>Permissions</th>
                   <th className="action-cell">Actions</th>
                 </tr>
               </thead>
               <tbody id="adminUserBody">
                 {users.map((user) => {
-                  const { txCount, totals } = getUserMetrics(user.id);
                   return (
                     <tr key={user.id}>
                       <td data-label="User">
@@ -334,17 +313,72 @@ export const AdminView: React.FC<AdminViewProps> = ({
                           {user.role}
                         </span>
                       </td>
-                      <td data-label="Transactions">{txCount}</td>
-                      <td data-label="Income">
-                        <div className="merchant-cell">
-                          <strong>{formatMoney(totals.income.KWD, 'KWD')}</strong>
-                          <span>{formatMoney(totals.income.INR, 'INR')}</span>
-                        </div>
+                      <td data-label="Status">
+                        {user.username === 'admin' ? (
+                          <span style={{
+                            padding: '4px 10px',
+                            fontSize: '12px',
+                            borderRadius: '6px',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            color: '#10b981',
+                            fontWeight: 600,
+                            display: 'inline-block'
+                          }}>
+                            Active
+                          </span>
+                        ) : (
+                          <button
+                            className={`button ${user.isFrozen ? 'button-danger' : 'button-soft'}`}
+                            type="button"
+                            onClick={() => handleToggleFreeze(user)}
+                            style={{
+                              padding: '4px 10px',
+                              minHeight: '28px',
+                              fontSize: '12px',
+                              borderRadius: '6px',
+                              background: user.isFrozen ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                              color: user.isFrozen ? '#ef4444' : '#10b981',
+                              border: 'none',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {user.isFrozen ? 'Frozen' : 'Active'}
+                          </button>
+                        )}
                       </td>
-                      <td data-label="Spending">
-                        <div className="merchant-cell">
-                          <strong>{formatMoney(totals.expense.KWD, 'KWD')}</strong>
-                          <span>{formatMoney(totals.expense.INR, 'INR')}</span>
+                      <td data-label="Permissions">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!(user.permissions?.transactions ?? true)}
+                              onChange={() => handleTogglePermission(user, 'transactions')}
+                              disabled={user.username === 'admin'}
+                              style={{ width: '14px', height: '14px', accentColor: 'var(--blue)' }}
+                            />
+                            Transactions
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!(user.permissions?.budgets ?? true)}
+                              onChange={() => handleTogglePermission(user, 'budgets')}
+                              disabled={user.username === 'admin'}
+                              style={{ width: '14px', height: '14px', accentColor: 'var(--blue)' }}
+                            />
+                            Budgets
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!(user.permissions?.savingsPots ?? true)}
+                              onChange={() => handleTogglePermission(user, 'savingsPots')}
+                              disabled={user.username === 'admin'}
+                              style={{ width: '14px', height: '14px', accentColor: 'var(--blue)' }}
+                            />
+                            Savings Pots
+                          </label>
                         </div>
                       </td>
                       <td data-label="Actions" className="action-cell">
@@ -409,16 +443,15 @@ export const AdminView: React.FC<AdminViewProps> = ({
             alignItems: 'center',
             animation: 'scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
           }}>
-            {/* Modal Icon Badge */}
             <div style={{
               width: '64px',
               height: '64px',
               borderRadius: '50%',
               background: alertModal.tone === 'success' 
-                ? 'linear-gradient(135deg, #0a4f70, #46a1c5)' // Premium deep teal-blue to cyan
+                ? 'linear-gradient(135deg, #0a4f70, #46a1c5)' 
                 : alertModal.tone === 'error'
-                ? 'linear-gradient(135deg, #d34221, #f2894f)' // Premium terracotta red/coral orange
-                : 'linear-gradient(135deg, #118ab2, #84cce4)', // Cyan to light blue gradient
+                ? 'linear-gradient(135deg, #d34221, #f2894f)' 
+                : 'linear-gradient(135deg, #118ab2, #84cce4)', 
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
