@@ -1377,3 +1377,9 @@ tbody tr:hover {
   border-color: var(--blue) !important;
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

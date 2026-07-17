@@ -31,6 +31,8 @@ export const App: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionMessage, setTransitionMessage] = useState('');
 
   // Custom premium dialog modal state
   const [modalState, setModalState] = useState<{
@@ -292,6 +294,9 @@ export const App: React.FC = () => {
   };
 
   const handleLogin = async (userId: string) => {
+    setTransitionMessage('Authenticating...');
+    setIsTransitioning(true);
+
     try {
       const ledger = await dbService.getUserLedger(userId);
       setUserData((prev) => ({ ...prev, [userId]: ledger }));
@@ -307,6 +312,10 @@ export const App: React.FC = () => {
       setSessionExpired(false);
     } catch (error) {
       console.error('Failed to load user ledger from database', error);
+    } finally {
+      setTimeout(() => {
+        setIsTransitioning(false);
+      }, 1200);
     }
   };
 
@@ -318,10 +327,16 @@ export const App: React.FC = () => {
     );
     if (!confirmed) return;
 
-    setCurrentUserId(null);
-    setActiveUserId(null);
-    setEditingTransaction(null);
-    setCurrentView('dashboard');
+    setTransitionMessage('Signing Out Safely...');
+    setIsTransitioning(true);
+
+    setTimeout(() => {
+      setCurrentUserId(null);
+      setActiveUserId(null);
+      setEditingTransaction(null);
+      setCurrentView('dashboard');
+      setIsTransitioning(false);
+    }, 1200);
   };
 
   const handleThemeToggle = () => {
@@ -1105,6 +1120,42 @@ export const App: React.FC = () => {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Full-screen Loading Transition Overlay */}
+      {isTransitioning && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(7, 9, 12, 0.85)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 11000,
+          animation: 'fade-in 0.25s ease',
+          color: '#ffffff'
+        }}>
+          <div style={{
+            width: '60px',
+            height: '60px',
+            borderRadius: '50%',
+            border: '3px solid rgba(44, 155, 138, 0.1)',
+            borderTopColor: 'var(--green)',
+            animation: 'spin 1s linear infinite',
+            marginBottom: '20px'
+          }} />
+          <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0, letterSpacing: '0.05em' }}>
+            {transitionMessage}
+          </h2>
+          <p style={{ margin: '8px 0 0 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.6)' }}>
+            Securing your workspace data...
+          </p>
         </div>
       )}
     </div>
