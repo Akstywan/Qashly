@@ -1136,6 +1136,10 @@ tbody tr:hover {
     display: none !important;
   }
 
+  .hidden-mobile {
+    display: none !important;
+  }
+
   .summary-grid {
     grid-template-columns: 1fr;
   }

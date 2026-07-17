@@ -15,6 +15,7 @@ interface EntryPanelProps {
   onSubmit: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
   transactionCurrency: CurrencyCode;
   onTransactionCurrencyChange: (currency: CurrencyCode) => void;
+  hideOnMobile?: boolean;
 }
 
 const MONTHS = [
@@ -39,6 +40,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   onSubmit,
   transactionCurrency,
   onTransactionCurrencyChange,
+  hideOnMobile,
 }) => {
   const [entryType, setEntryType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
@@ -166,7 +168,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   };
 
   return (
-    <aside className="sidebar-aside entry-sidebar" aria-label="Transaction entry">
+    <aside className={`sidebar-aside entry-sidebar ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transaction entry">
       <div className="panel-heading">
         <div>
           <span className="eyebrow">{editingTransaction ? 'Modify' : 'New ledger record'}</span>

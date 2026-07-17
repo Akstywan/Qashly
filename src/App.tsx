@@ -22,7 +22,7 @@ export const App: React.FC = () => {
   const [userData, setUserData] = useState<Record<string, UserLedger>>({});
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile' | 'transactions'>('dashboard');
   const [theme, setTheme] = useState<'light' | 'dark'>(getPreferredTheme());
   const [month, setMonth] = useState<string>(getCurrentMonthKey());
   const [transactionCurrency, setTransactionCurrency] = useState<CurrencyCode>('KWD');
@@ -826,11 +826,11 @@ export const App: React.FC = () => {
             onClear={handleClear}
           />
           <main className={`workspace ${
-            currentView !== 'dashboard' || !(currentUser?.permissions?.transactions ?? true)
+            (currentView !== 'dashboard' && currentView !== 'transactions') || !(currentUser?.permissions?.transactions ?? true)
               ? 'admin-mode'
               : ''
           }`}>
-            {currentView === 'dashboard' && (currentUser?.permissions?.transactions ?? true) && (
+            {(currentView === 'dashboard' || currentView === 'transactions') && (currentUser?.permissions?.transactions ?? true) && (
               <EntryPanel
                 month={month}
                 editingTransaction={editingTransaction}
@@ -838,10 +838,11 @@ export const App: React.FC = () => {
                 onSubmit={handleSubmitTransaction}
                 transactionCurrency={transactionCurrency}
                 onTransactionCurrencyChange={setTransactionCurrency}
+                hideOnMobile={currentView === 'dashboard'}
               />
             )}
 
-            {currentView === 'dashboard' ? (
+            {(currentView === 'dashboard' || currentView === 'transactions') ? (
               <DashboardView
                 monthTransactions={monthTransactions}
                 budgets={activeLedger.budgets}
@@ -857,6 +858,8 @@ export const App: React.FC = () => {
                 onBulkUpdateTransactions={handleBulkUpdateTransactions}
                 theme={theme}
                 permissions={currentUser?.permissions}
+                hideTransactionsOnMobile={currentView === 'dashboard'}
+                showOnlyTransactionsOnMobile={currentView === 'transactions'}
               />
             ) : currentView === 'report' ? (
               <ReportView

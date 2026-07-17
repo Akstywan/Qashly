@@ -9,11 +9,11 @@ interface TopbarProps {
   month: string;
   dashboardCurrency: CurrencyCode;
   theme: 'light' | 'dark';
-  currentView: 'dashboard' | 'admin' | 'report' | 'profile';
+  currentView: 'dashboard' | 'admin' | 'report' | 'profile' | 'transactions';
   onMonthChange: (month: string) => void;
   onDashboardCurrencyChange: (currency: CurrencyCode) => void;
   onThemeToggle: () => void;
-  onViewChange: (view: 'dashboard' | 'admin' | 'report' | 'profile') => void;
+  onViewChange: (view: 'dashboard' | 'admin' | 'report' | 'profile' | 'transactions') => void;
   onSignOut: () => void;
   onExport: () => void;
   onClear: () => void;
@@ -182,6 +182,17 @@ export const Topbar: React.FC<TopbarProps> = ({
         <Icon name="chart" />
         <span>Dashboard</span>
       </button>
+
+      {(currentUser?.permissions?.transactions ?? true) && (
+        <button
+          className={`mobile-tab-item ${currentView === 'transactions' ? 'active' : ''}`}
+          type="button"
+          onClick={() => onViewChange('transactions')}
+        >
+          <Icon name="wallet" />
+          <span>Transactions</span>
+        </button>
+      )}
 
       <button
         className={`mobile-tab-item ${currentView === 'report' ? 'active' : ''}`}

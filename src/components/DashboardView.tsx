@@ -31,6 +31,8 @@ interface DashboardViewProps {
     budgets: boolean;
     transactions: boolean;
   };
+  hideTransactionsOnMobile?: boolean;
+  showOnlyTransactionsOnMobile?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -47,7 +49,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onBulkDeleteTransactions,
   onBulkUpdateTransactions,
   theme,
-  permissions
+  permissions,
+  hideTransactionsOnMobile,
+  showOnlyTransactionsOnMobile
 }) => {
   // Local filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -206,7 +210,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <section className="main-area" aria-label="Expense dashboard">
       <div className="dashboard-view" id="dashboardView">
         {/* Summary Metric Cards */}
-        <div className="summary-grid" aria-label="Monthly summary">
+        <div className={`summary-grid ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Monthly summary">
           <article className="metric">
             <span>Balance</span>
             <strong id="balanceValue">{renderMoneyStack(balanceTotals)}</strong>
@@ -234,7 +238,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Charts & Budgets Panel */}
-        <div className="insight-grid" style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
+        <div className={`insight-grid ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
           <Charts
             transactions={monthTransactions}
             dashboardCurrency={dashboardCurrency}
@@ -312,18 +316,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Savings Pots Panel */}
           {(permissions?.savingsPots ?? true) && (
-            <SavingsPots
-              savingsPots={savingsPots}
-              onAddPot={onAddSavingsPot}
-              onDeletePot={onDeleteSavingsPot}
-              onAdjustBalance={onAdjustSavingsBalance}
-              dashboardCurrency={dashboardCurrency}
-            />
+            <div className={showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}>
+              <SavingsPots
+                savingsPots={savingsPots}
+                onAddPot={onAddSavingsPot}
+                onDeletePot={onDeleteSavingsPot}
+                onAdjustBalance={onAdjustSavingsBalance}
+                dashboardCurrency={dashboardCurrency}
+              />
+            </div>
           )}
 
 
           {/* Transactions Register */}
-          <section className="panel register-panel" aria-label="Transactions">
+          <section className={`panel register-panel ${hideTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transactions">
             <div className="panel-heading register-heading">
               <div>
                 <span className="eyebrow">Register</span>
