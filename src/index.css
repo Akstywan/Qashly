@@ -1169,7 +1169,8 @@ tbody tr:hover {
   
   .topbar-actions {
     justify-content: flex-end !important;
-    gap: 6px !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
   }
 
   /* Hide text labels inside topbar action buttons on mobile */
@@ -1178,25 +1179,39 @@ tbody tr:hover {
     display: none !important;
   }
 
-  .topbar-actions .button {
+  .topbar-actions .button,
+  .topbar-actions .icon-button {
     padding: 0 !important;
-    width: 34px !important;
-    height: 34px !important;
+    width: 30px !important;
+    height: 30px !important;
+    min-height: 0 !important;
     justify-content: center !important;
   }
 
   .topbar-actions .month-control {
-    padding: 0 4px !important;
-    height: 34px !important;
+    padding: 0 2px !important;
+    height: 30px !important;
     gap: 0 !important;
   }
 
-  .topbar-actions .month-control input[type="month"],
-  .topbar-actions .month-control select {
+  .topbar-actions .month-control input[type="month"] {
+    width: 90px !important;
     padding: 0 4px !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
     border: none !important;
     background: transparent !important;
+  }
+  
+  .topbar-actions .month-control select {
+    width: 52px !important;
+    padding: 0 2px !important;
+    font-size: 11px !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .topbar .brand p {
+    display: none !important;
   }
   
   .filters {
