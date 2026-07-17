@@ -165,7 +165,7 @@ export const SavingsPots: React.FC<SavingsPotsProps> = ({
                   className="icon-button danger"
                   style={{ width: '32px', height: '32px' }}
                   type="button"
-                  onClick={() => confirm(`Delete pot "${pot.name}"?`) && onDeletePot(pot.id)}
+                  onClick={() => onDeletePot(pot.id)}
                   title="Delete Pot"
                 >
                   <Icon name="trash" />

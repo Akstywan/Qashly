@@ -246,9 +246,45 @@ export const App: React.FC = () => {
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
+    const originalUser = users.find((u) => u.id === updatedUser.id);
+    if (!originalUser) return;
+
+    // Check if status (freeze) changed
+    if (updatedUser.isFrozen !== originalUser.isFrozen) {
+      const action = updatedUser.isFrozen ? 'freeze' : 'unfreeze';
+      const confirmed = await showCustomConfirm(
+        `${updatedUser.isFrozen ? 'Freeze' : 'Unfreeze'} User Account`,
+        `Are you sure you want to ${action} the account for ${updatedUser.name}?`,
+        updatedUser.isFrozen ? 'warning' : 'info'
+      );
+      if (!confirmed) return;
+    } else {
+      // Permissions changed
+      const confirmed = await showCustomConfirm(
+        'Update User Permissions',
+        `Are you sure you want to update the access permissions for ${updatedUser.name}?`,
+        'info'
+      );
+      if (!confirmed) return;
+    }
+
     try {
       await dbService.saveUser(updatedUser);
       setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+
+      if (updatedUser.isFrozen !== originalUser.isFrozen) {
+        await showCustomAlert(
+          'Account Status Updated',
+          `The account for ${updatedUser.name} has been successfully ${updatedUser.isFrozen ? 'frozen' : 'unfrozen'}.`,
+          'success'
+        );
+      } else {
+        await showCustomAlert(
+          'Permissions Updated',
+          `Access permissions for ${updatedUser.name} have been updated successfully.`,
+          'success'
+        );
+      }
     } catch (error) {
       showCustomAlert('Database Error', 'Could not update user profile in the database.', 'error');
       throw error;
@@ -274,7 +310,14 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    const confirmed = await showCustomConfirm(
+      'Sign Out',
+      'Are you sure you want to sign out from your workspace?',
+      'info'
+    );
+    if (!confirmed) return;
+
     setCurrentUserId(null);
     setActiveUserId(null);
     setEditingTransaction(null);
@@ -521,6 +564,16 @@ export const App: React.FC = () => {
 
   const handleDeleteSavingsPot = async (id: string) => {
     if (!activeUserId) return;
+    const pot = (activeLedger.savingsPots || []).find((p) => p.id === id);
+    if (!pot) return;
+
+    const confirmed = await showCustomConfirm(
+      'Delete Savings Pot',
+      `Are you sure you want to permanently delete the savings pot "${pot.name}"?`,
+      'warning'
+    );
+    if (!confirmed) return;
+
     try {
       await dbService.deleteSavingsPot(activeUserId, id);
       setUserData((prev) => {
@@ -534,6 +587,7 @@ export const App: React.FC = () => {
           }
         };
       });
+      showCustomAlert('Savings Pot Deleted', `The savings pot "${pot.name}" has been deleted successfully.`, 'success');
     } catch (error) {
       showCustomAlert('Database Error', 'Failed to delete savings pot from database.', 'error');
     }
@@ -571,6 +625,16 @@ export const App: React.FC = () => {
 
   const handleEditTransaction = (tx: Transaction) => {
     setEditingTransaction(tx);
+    setTimeout(() => {
+      const formElement = document.getElementById('transactionForm') || document.querySelector('.entry-sidebar');
+      if (formElement) {
+        formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        formElement.classList.add('pulse-highlight');
+        setTimeout(() => {
+          formElement.classList.remove('pulse-highlight');
+        }, 1500);
+      }
+    }, 100);
   };
 
   const handleDeleteTransaction = async (id: string) => {

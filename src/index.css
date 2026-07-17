@@ -920,6 +920,7 @@ canvas {
 
 .search-field,
 .select-field {
+  display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 8px;
@@ -1355,5 +1356,24 @@ tbody tr:hover {
 .budget-row:hover .variance-pill {
   opacity: 1;
   transform: translateX(0);
+}
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(44, 155, 138, 0.4);
+    border-color: var(--blue) !important;
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(44, 155, 138, 0);
+    border-color: var(--blue) !important;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(44, 155, 138, 0);
+  }
+}
+
+.pulse-highlight {
+  animation: pulse-glow 1.5s ease-in-out;
+  border-color: var(--blue) !important;
 }
 
