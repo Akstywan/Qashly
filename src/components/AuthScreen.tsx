@@ -389,7 +389,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
               fontWeight: 500,
               lineHeight: '1.4'
             }}>
-              ⚠️ Your session has expired due to inactivity. Please sign in again.
+              <Icon name="warning" style={{ marginRight: '6px' }} /> Your session has expired due to inactivity. Please sign in again.
             </div>
           )}
 

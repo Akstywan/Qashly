@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import type { User, UserLedger, CurrencyCode, Transaction, SavingsPot } from './types';
+import type { User, UserLedger, CurrencyCode, Transaction, SavingsPot, Account } from './types';
 import {
   createEmptyBudgets,
   getCurrentMonthKey,
   getPreferredTheme,
   createId,
-  hashPassword
+  hashPassword,
+  expenseCategories,
+  incomeCategories,
+  getLocalUserPreferences,
+  saveLocalUserPreferences,
+  defaultEntryDate,
+  getPaymentModesForCurrency,
+  getPreviousMonthKey,
+  calculateMonthNetBalance,
+  formatMonthLabel
 } from './utils';
 import { dbService } from './dbService';
 import AuthScreen from './components/AuthScreen';
@@ -15,6 +24,8 @@ import DashboardView from './components/DashboardView';
 import AdminView from './components/AdminView';
 import ReportView from './components/ReportView';
 import ProfileView from './components/ProfileView';
+import MonthRolloverModal from './components/MonthRolloverModal';
+import Icon from './components/Icon';
 
 export const App: React.FC = () => {
   // Central App State
@@ -22,22 +33,199 @@ export const App: React.FC = () => {
   const [userData, setUserData] = useState<Record<string, UserLedger>>({});
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile' | 'transactions'>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 640) {
-      return 'transactions';
-    }
-    return 'dashboard';
-  });
+  const [currentView, setCurrentView] = useState<'dashboard' | 'admin' | 'report' | 'profile' | 'transactions'>('dashboard');
   const [theme, setTheme] = useState<'light' | 'dark'>(getPreferredTheme());
   const [month, setMonth] = useState<string>(getCurrentMonthKey());
   const [transactionCurrency, setTransactionCurrency] = useState<CurrencyCode>('KWD');
   const [dashboardCurrency, setDashboardCurrency] = useState<CurrencyCode>('KWD');
+  const [selectedAccount, setSelectedAccount] = useState<string>('all');
+  const [showManageAccountsModal, setShowManageAccountsModal] = useState<boolean>(false);
+  const [newManageAccName, setNewManageAccName] = useState<string>('');
+  const [newManageAccCurrency, setNewManageAccCurrency] = useState<CurrencyCode>('KWD');
+  const [showUserPreferencesModal, setShowUserPreferencesModal] = useState<boolean>(false);
+  const [prefDefaultExpenseCategory, setPrefDefaultExpenseCategory] = useState<string>('Groceries');
+  const [prefDefaultIncomeCategory, setPrefDefaultIncomeCategory] = useState<string>('Salary');
+  const [prefDefaultKwdPaymentMode, setPrefDefaultKwdPaymentMode] = useState<string>('KNET / Debit Card');
+  const [prefDefaultInrPaymentMode, setPrefDefaultInrPaymentMode] = useState<string>('UPI');
+  const [prefDefaultDisplayAccount, setPrefDefaultDisplayAccount] = useState<string>('all');
+  const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
+  const [showMonthRolloverModal, setShowMonthRolloverModal] = useState<boolean>(false);
+  const [transferFromAccount, setTransferFromAccount] = useState<string>('Main Account');
+  const [transferFromMode, setTransferFromMode] = useState<string>('KNET / Debit Card');
+  const [transferToAccount, setTransferToAccount] = useState<string>('Main Account');
+  const [transferToMode, setTransferToMode] = useState<string>('Cash');
+  const [transferAmount, setTransferAmount] = useState<string>('');
+  const [transferCurrency, setTransferCurrency] = useState<CurrencyCode>('KWD');
+  const [transferNotes, setTransferNotes] = useState<string>('');
+  const [showBaseCurrencyPromptModal, setShowBaseCurrencyPromptModal] = useState<boolean>(false);
+  const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState('');
+
+  // Auto-prompt Month Rollover modal when entering a month with unhandled previous balance
+  useEffect(() => {
+    if (!activeUserId || !isLoaded) return;
+    const activeLedger = userData[activeUserId];
+    if (!activeLedger || !activeLedger.transactions) return;
+
+    const dismissedKey = `qashly_rollover_dismissed_${activeUserId}_${month}`;
+    const isDismissed = localStorage.getItem(dismissedKey) === 'true';
+
+    if (!isDismissed) {
+      const prevMonth = getPreviousMonthKey(month);
+      const kwdBalance = calculateMonthNetBalance(activeLedger.transactions, prevMonth, 'KWD');
+      const inrBalance = calculateMonthNetBalance(activeLedger.transactions, prevMonth, 'INR');
+
+      if (kwdBalance > 0 || inrBalance > 0) {
+        setShowMonthRolloverModal(true);
+      }
+    }
+  }, [activeUserId, month, isLoaded, userData]);
+
+  const handleConfirmMonthRollover = async (params: {
+    sourceMonth: string;
+    targetMonth: string;
+    currency: CurrencyCode;
+    amount: number;
+    account: string;
+    paymentMode: string;
+    notes: string;
+  }) => {
+    if (!activeUserId) return;
+    const rolloverDate = `${params.targetMonth}-01`;
+    const rolloverTx: Transaction = {
+      id: createId(),
+      type: 'income',
+      currency: params.currency,
+      amount: params.amount,
+      merchant: `Rollover from ${formatMonthLabel(params.sourceMonth)}`,
+      date: rolloverDate,
+      category: 'Balance Transfer',
+      account: params.account,
+      paymentMode: params.paymentMode,
+      notes: params.notes
+    };
+
+    try {
+      await dbService.saveTransaction(activeUserId, rolloverTx);
+      setUserData((prev) => {
+        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        return {
+          ...prev,
+          [activeUserId]: {
+            ...userL,
+            transactions: [...userL.transactions, rolloverTx]
+          }
+        };
+      });
+
+      localStorage.setItem(`qashly_rollover_dismissed_${activeUserId}_${params.targetMonth}`, 'true');
+
+      showCustomAlert(
+        'Balance Rollover Complete',
+        `Transferred ${params.amount} ${params.currency} from ${formatMonthLabel(params.sourceMonth)} to ${formatMonthLabel(params.targetMonth)}.`,
+        'success'
+      );
+    } catch (err) {
+      showCustomAlert('Database Error', 'Failed to save balance rollover transaction.', 'error');
+      throw err;
+    }
+  };
+
+  const handleDismissMonthRollover = (targetMonth: string) => {
+    if (activeUserId) {
+      localStorage.setItem(`qashly_rollover_dismissed_${activeUserId}_${targetMonth}`, 'true');
+    }
+  };
+
+  // Sync user local preferences
+  useEffect(() => {
+    if (activeUserId) {
+      const prefs = getLocalUserPreferences(activeUserId);
+      if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
+      else if (prefs.defaultCategory) setPrefDefaultExpenseCategory(prefs.defaultCategory);
+      if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
+      if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
+      else if (prefs.defaultPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultPaymentMode);
+      if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
+      if (prefs.defaultDisplayAccount) {
+        setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
+        setSelectedAccount(prefs.defaultDisplayAccount);
+      }
+    }
+  }, [activeUserId, showUserPreferencesModal]);
+
+  const handleExecuteTransfer = async () => {
+    if (!activeUserId) return;
+    const amountNum = Number(transferAmount);
+    if (!amountNum || amountNum <= 0) {
+      showCustomAlert('Transfer Error', 'Please enter a valid transfer amount.', 'error');
+      return;
+    }
+
+    const sourceLabel = transferFromAccount || 'Main Account';
+    const destLabel = transferToAccount || 'Main Account';
+    if (sourceLabel === destLabel && transferFromMode === transferToMode) {
+      showCustomAlert('Transfer Error', 'Source and destination account/mode cannot be identical.', 'error');
+      return;
+    }
+
+    const transferDate = defaultEntryDate(month);
+    const noteText = transferNotes.trim() ? transferNotes.trim() : `Transfer from ${sourceLabel} (${transferFromMode}) to ${destLabel} (${transferToMode})`;
+
+    const outflowTx: Transaction = {
+      id: createId(),
+      type: 'expense',
+      currency: transferCurrency,
+      amount: amountNum,
+      merchant: `Transfer to ${destLabel} (${transferToMode})`,
+      date: transferDate,
+      category: 'Transfer',
+      account: sourceLabel,
+      paymentMode: transferFromMode,
+      notes: noteText
+    };
+
+    const inflowTx: Transaction = {
+      id: createId(),
+      type: 'income',
+      currency: transferCurrency,
+      amount: amountNum,
+      merchant: `Transfer from ${sourceLabel} (${transferFromMode})`,
+      date: transferDate,
+      category: 'Transfer',
+      account: destLabel,
+      paymentMode: transferToMode,
+      notes: noteText
+    };
+
+    try {
+      await dbService.saveTransaction(activeUserId, outflowTx);
+      await dbService.saveTransaction(activeUserId, inflowTx);
+
+      setUserData((prev) => {
+        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        return {
+          ...prev,
+          [activeUserId]: {
+            ...userL,
+            transactions: [...userL.transactions, outflowTx, inflowTx]
+          }
+        };
+      });
+
+      setShowTransferModal(false);
+      setTransferAmount('');
+      setTransferNotes('');
+      showCustomAlert('Transfer Complete', `Transferred ${amountNum} ${transferCurrency} from "${sourceLabel} (${transferFromMode})" to "${destLabel} (${transferToMode})".`, 'success');
+    } catch (error) {
+      showCustomAlert('Database Error', 'Failed to complete account transfer.', 'error');
+    }
+  };
 
   // Custom premium dialog modal state
   const [modalState, setModalState] = useState<{
@@ -229,8 +417,8 @@ export const App: React.FC = () => {
   const activeUser = users.find((u) => u.id === activeUserId) || null;
   
   const activeLedger = activeUserId 
-    ? userData[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [] } 
-    : { transactions: [], budgets: createEmptyBudgets(), savingsPots: [] };
+    ? userData[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] } 
+    : { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
 
   // Filter transactions for currently selected month
   const monthTransactions = activeLedger.transactions.filter((t) => t.date.startsWith(month));
@@ -298,6 +486,29 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleSaveBaseCurrency = async (selectedCurr: CurrencyCode) => {
+    const targetUserId = pendingLoginUserId || currentUserId;
+    if (!targetUserId) return;
+    const userToUpdate = users.find((u) => u.id === targetUserId);
+    if (!userToUpdate) return;
+
+    const updated: User = {
+      ...userToUpdate,
+      baseCurrency: selectedCurr
+    };
+
+    try {
+      await dbService.saveUser(updated);
+      setUsers((prev) => prev.map((u) => u.id === targetUserId ? updated : u));
+      setDashboardCurrency(selectedCurr);
+      setTransactionCurrency(selectedCurr);
+      setShowBaseCurrencyPromptModal(false);
+      setPendingLoginUserId(null);
+    } catch (e) {
+      console.error('Failed to save base currency', e);
+    }
+  };
+
   const handleLogin = async (userId: string) => {
     setTransitionMessage('Authenticating...');
     setIsTransitioning(true);
@@ -315,6 +526,27 @@ export const App: React.FC = () => {
       setCurrentView(window.innerWidth <= 640 ? 'transactions' : 'dashboard');
       setLastActivity(Date.now());
       setSessionExpired(false);
+
+      const loggedUser = dbUsers.find((u) => u.id === userId);
+      if (loggedUser && loggedUser.baseCurrency) {
+        setDashboardCurrency(loggedUser.baseCurrency);
+        setTransactionCurrency(loggedUser.baseCurrency);
+      } else {
+        setPendingLoginUserId(userId);
+        setShowBaseCurrencyPromptModal(true);
+      }
+
+      // Check if new user has 0 custom accounts created
+      if (!ledger.accounts || ledger.accounts.length === 0) {
+        setTimeout(async () => {
+          await showCustomAlert(
+            'Account Setup Required',
+            `Welcome ${loggedUser?.name || 'User'}! Please create your first account (e.g. Salary Account, Savings, Cash) to get started with Qashly.`,
+            'warning'
+          );
+          setShowManageAccountsModal(true);
+        }, 1300);
+      }
     } catch (error) {
       console.error('Failed to load user ledger from database', error);
     } finally {
@@ -679,6 +911,119 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleAddAccount = async (name: string, type?: Account['type'], currency?: CurrencyCode) => {
+    if (!activeUserId) return;
+    const newAccount: Account = {
+      id: createId(),
+      name: name.trim(),
+      type: type || 'checking',
+      currency: currency || 'KWD',
+    };
+
+    try {
+      await dbService.saveAccount(activeUserId, newAccount);
+      setUserData((prev) => {
+        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        const currentAccounts = userL.accounts || [];
+        return {
+          ...prev,
+          [activeUserId]: {
+            ...userL,
+            accounts: [...currentAccounts, newAccount]
+          }
+        };
+      });
+      showCustomAlert('Account Created', `Account "${newAccount.name}" was added successfully.`, 'success');
+    } catch (error) {
+      showCustomAlert('Database Error', 'Failed to save account.', 'error');
+    }
+  };
+
+  const handleDeleteAccount = async (id: string) => {
+    if (!activeUserId) return;
+    const account = (activeLedger.accounts || []).find((a) => a.id === id);
+    if (!account) return;
+
+    const confirmed = await showCustomConfirm(
+      'Delete Account',
+      `Are you sure you want to delete account "${account.name}"? Transactions associated with it will remain intact.`,
+      'warning'
+    );
+    if (!confirmed) return;
+
+    try {
+      await dbService.deleteAccount(activeUserId, id);
+      setUserData((prev) => {
+        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        const currentAccounts = userL.accounts || [];
+        return {
+          ...prev,
+          [activeUserId]: {
+            ...userL,
+            accounts: currentAccounts.filter((a) => a.id !== id)
+          }
+        };
+      });
+      showCustomAlert('Account Removed', `Account "${account.name}" has been deleted.`, 'success');
+    } catch (error) {
+      showCustomAlert('Database Error', 'Failed to delete account.', 'error');
+    }
+  };
+
+  const handleEditAccount = async (account: Account) => {
+    if (!activeUserId) return;
+    setModalPromptInput(account.name);
+    const newName = await showCustomPrompt(
+      'Rename Account',
+      `Enter new name for account "${account.name}":`,
+      'info'
+    );
+    if (!newName || !newName.trim() || newName.trim() === account.name) return;
+
+    const oldName = account.name;
+    const updatedAccount: Account = {
+      ...account,
+      name: newName.trim()
+    };
+
+    try {
+      await dbService.saveAccount(activeUserId, updatedAccount);
+
+      const userL = userData[activeUserId];
+      let updatedTxs = userL ? [...userL.transactions] : [];
+      let txsChanged = false;
+
+      updatedTxs = updatedTxs.map((t) => {
+        if (t.account === oldName) {
+          txsChanged = true;
+          return { ...t, account: newName.trim() };
+        }
+        return t;
+      });
+
+      if (txsChanged) {
+        await dbService.saveTransactions(activeUserId, updatedTxs);
+      }
+
+      setUserData((prev) => {
+        const u = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        const currentAccs = u.accounts || [];
+        return {
+          ...prev,
+          [activeUserId]: {
+            ...u,
+            accounts: currentAccs.map((a) => (a.id === account.id ? updatedAccount : a)),
+            transactions: txsChanged ? updatedTxs : u.transactions
+          }
+        };
+      });
+
+      showCustomAlert('Account Renamed', `Account renamed to "${newName.trim()}".`, 'success');
+    } catch (e) {
+      showCustomAlert('Error', 'Failed to rename account.', 'error');
+    }
+  };
+
   const handleSubmitTransaction = async (txData: Omit<Transaction, 'id'> & { id?: string }) => {
     if (!activeUserId) return;
 
@@ -691,7 +1036,7 @@ export const App: React.FC = () => {
     try {
       await dbService.saveTransaction(activeUserId, finalTx);
       setUserData((prev) => {
-        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [] };
+        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
         let newTransactions = [...userL.transactions];
 
         if (txData.id) {
@@ -715,6 +1060,15 @@ export const App: React.FC = () => {
       setTransactionCurrency(txData.currency);
       setDashboardCurrency(txData.currency);
       setEditingTransaction(null);
+
+      // Popup notification confirmation modal when transaction is added or updated
+      const isEditing = !!txData.id;
+      const amountFormatted = `${finalTx.currency} ${finalTx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+      showCustomAlert(
+        isEditing ? 'Transaction Updated!' : 'Transaction Added Successfully!',
+        `${finalTx.type === 'income' ? 'Received' : 'Spent'} ${amountFormatted} ${finalTx.type === 'income' ? 'from' : 'at'} "${finalTx.merchant}" [${finalTx.category} • ${finalTx.account}].`,
+        'success'
+      );
     } catch (error) {
       showCustomAlert('Database Error', 'Failed to save transaction record in database.', 'error');
     }
@@ -829,6 +1183,13 @@ export const App: React.FC = () => {
             onSignOut={handleSignOut}
             onExport={handleExport}
             onClear={handleClear}
+            accounts={activeLedger.accounts || []}
+            selectedAccount={selectedAccount}
+            onAccountChange={setSelectedAccount}
+            onOpenManageAccounts={() => setShowManageAccountsModal(true)}
+            onOpenUserPreferences={() => setShowUserPreferencesModal(true)}
+            onOpenTransferModal={() => setShowTransferModal(true)}
+            onOpenMonthRolloverModal={() => setShowMonthRolloverModal(true)}
           />
           <main className={`workspace ${
             (currentView !== 'dashboard' && currentView !== 'transactions') || !(currentUser?.permissions?.transactions ?? true)
@@ -844,6 +1205,10 @@ export const App: React.FC = () => {
                 transactionCurrency={transactionCurrency}
                 onTransactionCurrencyChange={setTransactionCurrency}
                 hideOnMobile={currentView === 'dashboard'}
+                accounts={activeLedger.accounts || []}
+                activeUserId={activeUserId || undefined}
+                permissions={currentUser?.permissions}
+                onAddAccount={handleAddAccount}
               />
             )}
 
@@ -852,6 +1217,8 @@ export const App: React.FC = () => {
                 monthTransactions={monthTransactions}
                 budgets={activeLedger.budgets}
                 savingsPots={activeLedger.savingsPots || []}
+                accounts={activeLedger.accounts || []}
+                selectedAccount={selectedAccount}
                 dashboardCurrency={dashboardCurrency}
                 onBudgetChange={handleBudgetChange}
                 onEditTransaction={handleEditTransaction}
@@ -859,6 +1226,8 @@ export const App: React.FC = () => {
                 onAddSavingsPot={handleAddSavingsPot}
                 onDeleteSavingsPot={handleDeleteSavingsPot}
                 onAdjustSavingsBalance={handleAdjustSavingsBalance}
+                onAddAccount={handleAddAccount}
+                onDeleteAccount={handleDeleteAccount}
                 onBulkDeleteTransactions={handleBulkDeleteTransactions}
                 onBulkUpdateTransactions={handleBulkUpdateTransactions}
                 theme={theme}
@@ -910,7 +1279,7 @@ export const App: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 10000,
+          zIndex: 20000,
           padding: '20px',
           animation: 'fade-in 0.25s ease'
         }}>
@@ -955,7 +1324,7 @@ export const App: React.FC = () => {
                 ? '0 8px 20px rgba(231, 111, 81, 0.3)'
                 : '0 8px 20px rgba(17, 138, 178, 0.3)'
             }}>
-              {modalState.tone === 'success' ? '✓' : modalState.tone === 'error' ? '!' : modalState.tone === 'warning' ? '⚠️' : 'i'}
+              <Icon name={modalState.tone === 'success' ? 'check' : modalState.tone === 'error' ? 'x' : modalState.tone === 'warning' ? 'warning' : 'info'} />
             </div>
 
             <h3 style={{
@@ -1154,6 +1523,669 @@ export const App: React.FC = () => {
           </p>
         </div>
       )}
+
+      {/* Manage Accounts Modal Popup */}
+      {showManageAccountsModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 9, 12, 0.45)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10500,
+          padding: '20px',
+          animation: 'fade-in 0.25s ease'
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            maxWidth: '440px',
+            width: '100%',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="eyebrow">Multi-Account Management</span>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>Manage Accounts</h2>
+              </div>
+              <button
+                type="button"
+                className="button button-soft"
+                onClick={() => setShowManageAccountsModal(false)}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+              >
+                Close
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
+              Create and manage custom accounts for tracking expenses separately across different banks, wallets, or credit cards.
+            </p>
+
+            {(activeLedger.accounts || []).length === 0 && (
+              <div style={{
+                padding: '10px 14px',
+                borderRadius: '12px',
+                background: 'rgba(234, 179, 8, 0.12)',
+                border: '1px solid rgba(234, 179, 8, 0.3)',
+                color: 'var(--text)',
+                fontSize: '12.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <Icon name="warning" style={{ color: 'var(--amber)' }} />
+                <span><strong>Account Setup Required:</strong> Please create your first account (e.g. Salary, Savings, Cash) below.</span>
+              </div>
+            )}
+
+            {/* Quick Create Form */}
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (newManageAccName.trim()) {
+                handleAddAccount(newManageAccName.trim(), 'checking', newManageAccCurrency);
+                setNewManageAccName('');
+              }
+            }} style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="New account name (e.g. Boubyan Salary)"
+                value={newManageAccName}
+                onChange={(e) => setNewManageAccName(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                  background: 'var(--field)',
+                  color: 'var(--text)',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+              <select
+                value={newManageAccCurrency}
+                onChange={(e) => setNewManageAccCurrency(e.target.value as CurrencyCode)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                  background: 'var(--field)',
+                  color: 'var(--text)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                <option value="KWD">KWD</option>
+                <option value="INR">INR</option>
+              </select>
+              <button type="submit" className="button button-primary" style={{ padding: '0 16px', minHeight: '36px', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                + Add
+              </button>
+            </form>
+
+            {/* Accounts List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto', marginTop: '4px' }}>
+              {(activeLedger.accounts || []).length === 0 ? (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+                  No custom accounts created yet. Add your first account above!
+                </div>
+              ) : (
+                (activeLedger.accounts || []).map((acc) => (
+                <div key={acc.id} style={{
+                  padding: '12px',
+                  borderRadius: '12px',
+                  background: 'var(--surface-muted)',
+                  border: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13.5px' }}>{acc.name}</div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                      Custom Account • {acc.currency || dashboardCurrency}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="button button-soft"
+                      onClick={() => handleEditAccount(acc)}
+                      style={{ padding: '4px 10px', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Icon name="edit" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-soft danger"
+                      onClick={() => handleDeleteAccount(acc.id)}
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Preferences Modal Popup */}
+      {showUserPreferencesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 9, 12, 0.45)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10500,
+          padding: '20px',
+          animation: 'fade-in 0.25s ease'
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            maxWidth: '440px',
+            width: '100%',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="eyebrow">Local Preference Settings</span>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>User Preferences</h2>
+              </div>
+              <button
+                type="button"
+                className="button button-soft"
+                onClick={() => setShowUserPreferencesModal(false)}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+              >
+                Close
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
+              Set your preferred default categories and payment mode for quick entry. Saved locally in your browser.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <label className="field" htmlFor="prefExpenseCategorySelect">
+                <span>Default Expense Category</span>
+                <select
+                  id="prefExpenseCategorySelect"
+                  value={prefDefaultExpenseCategory}
+                  onChange={(e) => setPrefDefaultExpenseCategory(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  {expenseCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field" htmlFor="prefIncomeCategorySelect">
+                <span>Default Income Category</span>
+                <select
+                  id="prefIncomeCategorySelect"
+                  value={prefDefaultIncomeCategory}
+                  onChange={(e) => setPrefDefaultIncomeCategory(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  {incomeCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field" htmlFor="prefKwdAccountSelect">
+                <span>Default Kuwait (KWD) Payment Mode</span>
+                <select
+                  id="prefKwdAccountSelect"
+                  value={prefDefaultKwdPaymentMode}
+                  onChange={(e) => setPrefDefaultKwdPaymentMode(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="KNET / Debit Card">KNET / Debit Card</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  {(activeLedger.accounts || []).filter(a => !a.currency || a.currency === 'KWD').map(acc => (
+                    <option key={acc.id} value={acc.name}>{acc.name} (KWD)</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field" htmlFor="prefInrAccountSelect">
+                <span>Default India (INR) Payment Mode</span>
+                <select
+                  id="prefInrAccountSelect"
+                  value={prefDefaultInrPaymentMode}
+                  onChange={(e) => setPrefDefaultInrPaymentMode(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                  <option value="Net Banking">Net Banking</option>
+                  <option value="Debit Card">Debit Card</option>
+                  <option value="Credit Card">Credit Card</option>
+                  <option value="Cash">Cash</option>
+                  {(activeLedger.accounts || []).filter(a => a.currency === 'INR').map(acc => (
+                    <option key={acc.id} value={acc.name}>{acc.name} (INR)</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field" htmlFor="prefDisplayAccountSelect">
+                <span>Default Display Account (Filter)</span>
+                <select
+                  id="prefDisplayAccountSelect"
+                  value={prefDefaultDisplayAccount}
+                  onChange={(e) => setPrefDefaultDisplayAccount(e.target.value)}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="all">All Accounts (Show Everything)</option>
+                  {(activeLedger.accounts || []).length > 0 && (
+                    <optgroup label="My Custom Accounts">
+                      {(activeLedger.accounts || []).map(acc => (
+                        <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Standard Payment Modes">
+                    <option value="KNET / Debit Card">KNET / Debit Card</option>
+                    <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                    <option value="Net Banking">Net Banking</option>
+                    <option value="Credit Card">Credit Card</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </optgroup>
+                </select>
+              </label>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="button button-soft"
+                  onClick={() => setShowUserPreferencesModal(false)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={async () => {
+                    if (activeUserId) {
+                      saveLocalUserPreferences(activeUserId, {
+                        defaultExpenseCategory: prefDefaultExpenseCategory,
+                        defaultIncomeCategory: prefDefaultIncomeCategory,
+                        defaultKwdPaymentMode: prefDefaultKwdPaymentMode,
+                        defaultInrPaymentMode: prefDefaultInrPaymentMode,
+                        defaultDisplayAccount: prefDefaultDisplayAccount
+                      });
+
+                      setSelectedAccount(prefDefaultDisplayAccount);
+
+                      if (currentUser) {
+                        const updatedUser = {
+                          ...currentUser,
+                          userPreferences: {
+                            defaultExpenseCategory: prefDefaultExpenseCategory,
+                            defaultIncomeCategory: prefDefaultIncomeCategory,
+                            defaultKwdPaymentMode: prefDefaultKwdPaymentMode,
+                            defaultInrPaymentMode: prefDefaultInrPaymentMode,
+                            defaultDisplayAccount: prefDefaultDisplayAccount
+                          }
+                        };
+                        try {
+                          await dbService.saveUser(updatedUser);
+                          setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
+                        } catch (e) {
+                          console.warn('DB save user preferences fallback to local:', e);
+                        }
+                      }
+
+                      setShowUserPreferencesModal(false);
+                      showCustomAlert('Preferences Saved', 'Your default categories, payment modes, and display account filter have been saved successfully.', 'success');
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  Save Preferences
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Money Between Accounts Modal */}
+      {showTransferModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 9, 12, 0.45)',
+          backdropFilter: 'blur(12px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10500,
+          padding: '20px',
+          animation: 'fade-in 0.25s ease'
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            maxWidth: '440px',
+            width: '100%',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span className="eyebrow">Internal Transfer</span>
+                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>Transfer Money</h2>
+              </div>
+              <button
+                type="button"
+                className="button button-soft"
+                onClick={() => setShowTransferModal(false)}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+              >
+                Close
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
+              Transfer funds between your checking, savings, credit cards, or custom accounts.
+            </p>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleExecuteTransfer(); }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <label className="field" style={{ flex: 1 }}>
+                  <span>Amount</span>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0.000"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </label>
+
+                <label className="field" style={{ width: '100px' }}>
+                  <span>Currency</span>
+                  <select
+                    value={transferCurrency}
+                    onChange={(e) => {
+                      const newCurr = e.target.value as CurrencyCode;
+                      setTransferCurrency(newCurr);
+                      const modes = getPaymentModesForCurrency(newCurr, activeLedger.accounts || []);
+                      if (modes.length > 0) {
+                        setTransferFromAccount(modes[0]);
+                        setTransferToAccount(modes[1] || modes[0]);
+                      }
+                    }}
+                  >
+                    <option value="KWD">KWD</option>
+                    <option value="INR">INR</option>
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <label className="field">
+                  <span>From Account</span>
+                  <select
+                    value={transferFromAccount}
+                    onChange={(e) => setTransferFromAccount(e.target.value)}
+                  >
+                    <option value="Main Account">Main Account</option>
+                    {(activeLedger.accounts || []).map(acc => (
+                      <option key={acc.id} value={acc.name}>
+                        {acc.name} ({acc.currency || 'KWD'})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>From Payment Mode</span>
+                  <select
+                    value={transferFromMode}
+                    onChange={(e) => setTransferFromMode(e.target.value)}
+                  >
+                    {getPaymentModesForCurrency(transferCurrency, []).map(mode => (
+                      <option key={mode} value={mode}>{mode}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <label className="field">
+                  <span>To Account</span>
+                  <select
+                    value={transferToAccount}
+                    onChange={(e) => setTransferToAccount(e.target.value)}
+                  >
+                    <option value="Main Account">Main Account</option>
+                    {(activeLedger.accounts || []).map(acc => (
+                      <option key={acc.id} value={acc.name}>
+                        {acc.name} ({acc.currency || 'KWD'})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>To Payment Mode</span>
+                  <select
+                    value={transferToMode}
+                    onChange={(e) => setTransferToMode(e.target.value)}
+                  >
+                    {getPaymentModesForCurrency(transferCurrency, []).map(mode => (
+                      <option key={mode} value={mode}>{mode}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <label className="field">
+                <span>Notes / Purpose (Optional)</span>
+                <input
+                  type="text"
+                  placeholder="e.g. Monthly savings, card payment"
+                  value={transferNotes}
+                  onChange={(e) => setTransferNotes(e.target.value)}
+                />
+              </label>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="button button-soft"
+                  onClick={() => setShowTransferModal(false)}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="button button-primary"
+                  style={{ flex: 1 }}
+                >
+                  Complete Transfer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Base Currency Setup Modal */}
+      {showBaseCurrencyPromptModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(7, 9, 12, 0.75)',
+          backdropFilter: 'blur(16px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 11000,
+          padding: '20px',
+          animation: 'fade-in 0.25s ease'
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '24px',
+            padding: '36px 28px',
+            maxWidth: '400px',
+            width: '100%',
+            textAlign: 'center',
+            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #0a4f70, #46a1c5)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '28px',
+              fontWeight: 'bold',
+              marginBottom: '20px'
+            }}>
+              💱
+            </div>
+            <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 8px 0', color: 'var(--text)' }}>
+              Select Base Currency
+            </h3>
+            <p style={{ fontSize: '13.5px', color: 'var(--muted)', margin: '0 0 24px 0', lineHeight: 1.5 }}>
+              Choose the primary currency for your ledger workspace and accounts.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+              <button
+                type="button"
+                className="button"
+                onClick={() => handleSaveBaseCurrency('KWD')}
+                style={{
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #0a4f70, #46a1c5)',
+                  color: '#ffffff',
+                  borderRadius: '14px',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                KWD - Kuwaiti Dinar
+              </button>
+              <button
+                type="button"
+                className="button"
+                onClick={() => handleSaveBaseCurrency('INR')}
+                style={{
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #2080a8, #84cce4)',
+                  color: '#ffffff',
+                  borderRadius: '14px',
+                  fontWeight: 700,
+                  fontSize: '15px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                INR - Indian Rupee
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Month-End Balance Rollover Modal */}
+      <MonthRolloverModal
+        isOpen={showMonthRolloverModal}
+        onClose={() => setShowMonthRolloverModal(false)}
+        onConfirmRollover={handleConfirmMonthRollover}
+        onDismissMonth={handleDismissMonthRollover}
+        currentMonthKey={month}
+        transactions={activeLedger?.transactions || []}
+        userAccounts={activeLedger?.accounts || []}
+        defaultCurrency={dashboardCurrency}
+      />
     </div>
   );
 };

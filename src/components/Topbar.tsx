@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User, CurrencyCode } from '../types';
+import type { User, CurrencyCode, Account } from '../types';
 import { formatMonthLabel, firstName } from '../utils';
 import Icon from './Icon';
 
@@ -17,6 +17,13 @@ interface TopbarProps {
   onSignOut: () => void;
   onExport: () => void;
   onClear: () => void;
+  accounts?: Account[];
+  selectedAccount?: string;
+  onAccountChange?: (account: string) => void;
+  onOpenManageAccounts?: () => void;
+  onOpenUserPreferences?: () => void;
+  onOpenTransferModal?: () => void;
+  onOpenMonthRolloverModal?: () => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({
@@ -33,6 +40,13 @@ export const Topbar: React.FC<TopbarProps> = ({
   onSignOut,
   onExport,
   onClear,
+  accounts = [],
+  selectedAccount = 'all',
+  onAccountChange,
+  onOpenManageAccounts,
+  onOpenUserPreferences,
+  onOpenTransferModal,
+  onOpenMonthRolloverModal,
 }) => {
   const userDisplayName = activeUser ? activeUser.name : currentUser.name;
   const isViewingOtherUser = currentUser.role === 'admin' && activeUser?.id !== currentUser.id;
@@ -68,8 +82,63 @@ export const Topbar: React.FC<TopbarProps> = ({
           />
         </label>
 
+        {(currentUser?.permissions?.multiAccount ?? true) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <label className="month-control compact-control" htmlFor="accountSelector" style={{ minWidth: '130px' }}>
+              <span>Account</span>
+              <select
+                id="accountSelector"
+                value={selectedAccount}
+                onChange={(e) => {
+                  if (onAccountChange) {
+                    onAccountChange(e.target.value);
+                  }
+                }}
+                style={{ fontWeight: 600 }}
+              >
+                <option value="all">All Accounts</option>
+                {accounts.map((acc) => (
+                  <option key={acc.id} value={acc.name}>
+                    {acc.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="button button-soft"
+              onClick={onOpenManageAccounts}
+              title="Manage Accounts"
+              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="accounts" />
+              <span>Accounts</span>
+            </button>
+            <button
+              type="button"
+              className="button button-soft"
+              onClick={onOpenTransferModal}
+              title="Transfer Money Between Accounts"
+              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="transfer" />
+              <span>Transfer</span>
+            </button>
+            <button
+              type="button"
+              className="button button-soft"
+              onClick={onOpenMonthRolloverModal}
+              title="Rollover Month Balance to Next Month"
+              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon name="arrowRightLeft" />
+              <span>Rollover</span>
+            </button>
+          </div>
+        )}
+
         <label className="month-control compact-control" htmlFor="dashboardCurrency">
-          <span>View</span>
+          <span>Currency</span>
           <select
             id="dashboardCurrency"
             value={dashboardCurrency}
@@ -150,6 +219,17 @@ export const Topbar: React.FC<TopbarProps> = ({
         )}
 
         <button
+          className="button button-soft nav-btn-desktop"
+          id="userPreferencesBtn"
+          type="button"
+          onClick={onOpenUserPreferences}
+          title="User Preferences (Default Category & Payment Mode)"
+        >
+          <Icon name="settings" />
+          <span>Preferences</span>
+        </button>
+
+        <button
           className={`button button-soft nav-btn-desktop ${currentView === 'profile' ? 'active' : ''}`}
           id="profileBtn"
           type="button"
@@ -159,7 +239,6 @@ export const Topbar: React.FC<TopbarProps> = ({
           <Icon name="user" />
           <span>Profile</span>
         </button>
-
         <button
           className="button button-soft"
           id="signOutBtn"
@@ -201,6 +280,15 @@ export const Topbar: React.FC<TopbarProps> = ({
       >
         <Icon name="file-text" />
         <span>Report</span>
+      </button>
+
+      <button
+        className="mobile-tab-item"
+        type="button"
+        onClick={onOpenUserPreferences}
+      >
+        <Icon name="settings" />
+        <span>Prefs</span>
       </button>
 
       {currentUser.role === 'admin' && (

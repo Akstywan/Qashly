@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Transaction, Budgets, CurrencyCode, SavingsPot } from '../types';
+import type { Transaction, Budgets, CurrencyCode, SavingsPot, Account } from '../types';
 import {
   formatMoney,
   formatShortDate,
@@ -16,6 +16,8 @@ interface DashboardViewProps {
   monthTransactions: Transaction[];
   budgets: Budgets;
   savingsPots: SavingsPot[];
+  accounts?: Account[];
+  selectedAccount?: string;
   dashboardCurrency: CurrencyCode;
   onBudgetChange: (currency: CurrencyCode, category: string, amount: number) => void;
   onEditTransaction: (transaction: Transaction) => void;
@@ -23,6 +25,8 @@ interface DashboardViewProps {
   onAddSavingsPot: (name: string, targetAmount: number, currency: CurrencyCode) => void;
   onDeleteSavingsPot: (id: string) => void;
   onAdjustSavingsBalance: (id: string, amount: number) => void;
+  onAddAccount?: (name: string, type?: Account['type'], currency?: CurrencyCode) => void;
+  onDeleteAccount?: (id: string) => void;
   onBulkDeleteTransactions: (ids: string[]) => void;
   onBulkUpdateTransactions: (ids: string[], updates: Partial<Transaction>) => void;
   theme: 'light' | 'dark';
@@ -30,6 +34,7 @@ interface DashboardViewProps {
     savingsPots: boolean;
     budgets: boolean;
     transactions: boolean;
+    multiAccount?: boolean;
   };
   hideTransactionsOnMobile?: boolean;
   showOnlyTransactionsOnMobile?: boolean;
@@ -39,6 +44,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   monthTransactions,
   budgets,
   savingsPots,
+  accounts = [],
+  selectedAccount = 'all',
   dashboardCurrency,
   onBudgetChange,
   onEditTransaction,
@@ -58,16 +65,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [typeFilter, setTypeFilter] = useState<'all' | 'expense' | 'income'>('all');
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'KWD' | 'INR'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
 
   // Bulk checking/selection state
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState('');
   const [bulkAccount, setBulkAccount] = useState('');
 
+  // Active transaction set based on topbar Account selector
+  const activeTransactions = (selectedAccount && selectedAccount !== 'all')
+    ? monthTransactions.filter((t) => t.account === selectedAccount)
+    : monthTransactions;
+
   // Calculate totals stacked by currency
   const calculateTotals = (type?: 'income' | 'expense') => {
     const totals = { KWD: 0, INR: 0 };
-    monthTransactions
+    activeTransactions
       .filter((t) => !type || t.type === type)
       .forEach((t) => {
         totals[t.currency] += t.amount;
@@ -112,7 +125,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     : `${dashboardCurrency} budget not set`;
 
   // Get active currency spending maps for budget progress bars
-  const activeMonthExpenses = monthTransactions.filter(
+  const activeMonthExpenses = activeTransactions.filter(
     (t) => t.type === 'expense' && t.currency === dashboardCurrency
   );
   const spendingMap = new Map<string, number>();
@@ -121,10 +134,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   });
 
   // Filter and sort transactions
-  const filteredTransactions = monthTransactions
+  const filteredTransactions = activeTransactions
     .filter((t) => typeFilter === 'all' || t.type === typeFilter)
     .filter((t) => currencyFilter === 'all' || t.currency === currencyFilter)
     .filter((t) => categoryFilter === 'all' || t.category === categoryFilter)
+    .filter((t) => accountFilter === 'all' || t.account === accountFilter)
     .filter((t) => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -317,7 +331,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* Savings Pots Panel */}
           {(permissions?.savingsPots ?? true) && (
-            <div className={showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}>
+            <div className={`budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`}>
               <SavingsPots
                 savingsPots={savingsPots}
                 onAddPot={onAddSavingsPot}
@@ -327,7 +341,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               />
             </div>
           )}
-
 
           {/* Transactions Register */}
           <section className={`panel register-panel ${hideTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transactions">
@@ -393,6 +406,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   ))}
                 </select>
               </label>
+
+              {(permissions?.multiAccount ?? true) && (
+                <label className="select-field" htmlFor="accountFilter">
+                  <Icon name="credit-card" />
+                  <select
+                    id="accountFilter"
+                    value={accountFilter}
+                    onChange={(e) => setAccountFilter(e.target.value)}
+                  >
+                    <option value="all">All accounts</option>
+                    <option value="KNET / Debit Card">KNET / Debit Card</option>
+                    <option value="Credit Card">Credit Card</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.name}>{acc.name}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
 
             {/* Bulk Actions Toolbar (Sleek checked item manager) */}
@@ -474,11 +507,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       outline: 'none'
                     }}
                   >
-                    <option value="">Set Account...</option>
-                    <option value="KNET / Debit Card">KNET / Debit Card</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="">Change Account to...</option>
+                    <optgroup label="Standard Payment Modes">
+                      <option value="KNET / Debit Card">KNET / Debit Card</option>
+                      <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                      <option value="Net Banking">Net Banking</option>
+                      <option value="Credit Card">Credit Card</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                    </optgroup>
+                    {accounts.length > 0 && (
+                      <optgroup label="Custom Accounts">
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
 
                   <button

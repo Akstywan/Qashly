@@ -1,3 +1,10 @@
+export interface UserPreferences {
+  defaultCategory?: string;
+  defaultExpenseCategory?: string;
+  defaultIncomeCategory?: string;
+  defaultPaymentMode?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -8,15 +15,25 @@ export interface User {
   securityQuestion?: string;
   securityAnswerHash?: string;
   isFrozen?: boolean;
+  baseCurrency?: CurrencyCode;
+  userPreferences?: UserPreferences;
   permissions?: {
     savingsPots: boolean;
     budgets: boolean;
     transactions: boolean;
+    multiAccount?: boolean;
   };
 }
 
 export type TransactionType = 'expense' | 'income';
 export type CurrencyCode = 'KWD' | 'INR';
+
+export interface Account {
+  id: string;
+  name: string;
+  type?: 'checking' | 'savings' | 'credit' | 'cash' | 'other';
+  currency?: CurrencyCode;
+}
 
 export interface Transaction {
   id: string;
@@ -27,6 +44,7 @@ export interface Transaction {
   date: string; // YYYY-MM-DD
   category: string;
   account: string;
+  paymentMode?: string;
   notes: string;
   reconciled?: boolean;
 }
@@ -49,6 +67,7 @@ export interface UserLedger {
   transactions: Transaction[];
   budgets: Budgets;
   savingsPots: SavingsPot[]; // Add savings pots array
+  accounts?: Account[];
 }
 
 export interface AppState {

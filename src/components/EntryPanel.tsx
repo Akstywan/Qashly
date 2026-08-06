@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import type { Transaction, TransactionType, CurrencyCode } from '../types';
+import type { Transaction, TransactionType, CurrencyCode, Account } from '../types';
 import {
   currencyMeta,
   expenseCategories,
   incomeCategories,
-  defaultEntryDate
+  defaultEntryDate,
+  getLocalUserPreferences,
+  getPaymentModesForCurrency
 } from '../utils';
 import Icon from './Icon';
 
@@ -16,6 +18,15 @@ interface EntryPanelProps {
   transactionCurrency: CurrencyCode;
   onTransactionCurrencyChange: (currency: CurrencyCode) => void;
   hideOnMobile?: boolean;
+  accounts?: Account[];
+  activeUserId?: string;
+  permissions?: {
+    savingsPots?: boolean;
+    budgets?: boolean;
+    transactions?: boolean;
+    multiAccount?: boolean;
+  };
+  onAddAccount?: (name: string, type?: Account['type'], currency?: CurrencyCode) => void;
 }
 
 const MONTHS = [
@@ -41,6 +52,9 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   transactionCurrency,
   onTransactionCurrencyChange,
   hideOnMobile,
+  accounts = [],
+  activeUserId,
+  onAddAccount,
 }) => {
   const [entryType, setEntryType] = useState<TransactionType>('expense');
   const [amount, setAmount] = useState('');
@@ -48,8 +62,19 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   const [merchant, setMerchant] = useState('');
   const [date, setDate] = useState(defaultEntryDate(month));
   const [category, setCategory] = useState('');
-  const [account, setAccount] = useState('KNET / Debit Card');
+  const [account, setAccount] = useState(accounts[0]?.name || 'Main Account');
+  const [paymentMode, setPaymentMode] = useState<string>('KNET / Debit Card');
   const [notes, setNotes] = useState('');
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [newAccountName, setNewAccountName] = useState('');
+  const [newAccCurrency, setNewAccCurrency] = useState<CurrencyCode>(transactionCurrency);
+
+  // Auto-set default account when accounts list updates
+  useEffect(() => {
+    if (!editingTransaction && accounts.length > 0 && !accounts.some((a) => a.name === account)) {
+      setAccount(accounts[0].name);
+    }
+  }, [accounts, editingTransaction]);
 
   // Handle editing mode change
   useEffect(() => {
@@ -61,7 +86,8 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setMerchant(editingTransaction.merchant);
       setDate(editingTransaction.date);
       setCategory(editingTransaction.category);
-      setAccount(editingTransaction.account || 'KNET / Debit Card');
+      setAccount(editingTransaction.account || accounts[0]?.name || 'Main Account');
+      setPaymentMode(editingTransaction.paymentMode || (editingTransaction.currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
       setNotes(editingTransaction.notes || '');
     } else {
       resetForm();
@@ -80,18 +106,64 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
 
   // Set default category when type changes
   useEffect(() => {
-    if (categories.length > 0 && !categories.includes(category)) {
-      setCategory(categories[0]);
+    if (!editingTransaction) {
+      const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+      if (entryType === 'expense') {
+        const defExp = prefs.defaultExpenseCategory || prefs.defaultCategory;
+        if (defExp && expenseCategories.includes(defExp)) {
+          setCategory(defExp);
+          return;
+        }
+      } else if (entryType === 'income') {
+        const defInc = prefs.defaultIncomeCategory;
+        if (defInc && incomeCategories.includes(defInc)) {
+          setCategory(defInc);
+          return;
+        }
+      }
+      if (categories.length > 0 && !categories.includes(category)) {
+        setCategory(categories[0]);
+      }
     }
-  }, [entryType, category]);
+  }, [entryType]);
+
+  // Keep account/payment mode valid for current currency (INR vs KWD)
+  useEffect(() => {
+    if (!editingTransaction) {
+      const modes = getPaymentModesForCurrency(currency, accounts);
+      if (!modes.includes(account)) {
+        const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+        const prefMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
+        if (prefMode && modes.includes(prefMode)) {
+          setAccount(prefMode);
+        } else {
+          setAccount(modes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+        }
+      }
+    }
+  }, [currency, accounts]);
 
   const resetForm = () => {
     setEntryType('expense');
     setAmount('');
     setMerchant('');
     setDate(defaultEntryDate(month));
-    setCategory(expenseCategories[0]);
-    setAccount('KNET / Debit Card');
+
+    const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+    const defExp = prefs.defaultExpenseCategory || prefs.defaultCategory;
+    if (defExp && expenseCategories.includes(defExp)) {
+      setCategory(defExp);
+    } else {
+      setCategory(expenseCategories[0]);
+    }
+
+    const currentModes = getPaymentModesForCurrency(currency, accounts);
+    const defMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
+    if (defMode && currentModes.includes(defMode)) {
+      setAccount(defMode);
+    } else {
+      setAccount(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+    }
     setNotes('');
   };
 
@@ -103,9 +175,11 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       return;
     }
 
-    if (!merchant.trim() || !date || !category) {
+    if (!merchant.trim() || !date) {
       return;
     }
+
+    const finalCategory = category && category.trim() ? category.trim() : 'Other';
 
     onSubmit({
       id: editingTransaction?.id,
@@ -114,7 +188,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       amount: parsedAmount,
       merchant: merchant.trim(),
       date,
-      category,
+      category: finalCategory,
       account,
       notes: notes.trim()
     });
@@ -288,40 +362,132 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
           </div>
         </div>
 
-        {/* Category and Account / Method paired in row */}
-        <div className="field-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        {/* Separate Account, Payment Mode, and Category fields */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="field-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <label className="field" htmlFor="accountInput">
+              <span>Account</span>
+              <select
+                id="accountInput"
+                value={account}
+                onChange={(e) => setAccount(e.target.value)}
+              >
+                <option value="Main Account">Main Account</option>
+                {(accounts || []).map((acc) => (
+                  <option key={acc.id} value={acc.name}>
+                    {acc.name} ({acc.currency || 'KWD'})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field" htmlFor="paymentModeInput">
+              <span>Payment Mode</span>
+              <select
+                id="paymentModeInput"
+                value={paymentMode}
+                onChange={(e) => setPaymentMode(e.target.value)}
+              >
+                {getPaymentModesForCurrency(currency, []).map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           <label className="field" htmlFor="categoryInput">
-            <span>Category</span>
+            <span>Category / Head (Optional)</span>
             <select
               id="categoryInput"
-              required
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
+              <option value="">(None / Optional)</option>
               {categories.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
           </label>
-
-          <label className="field" htmlFor="accountInput">
-            <span>Account / method</span>
-            <select
-              id="accountInput"
-              value={account}
-              onChange={(e) => setAccount(e.target.value)}
-            >
-              <option>KNET / Debit Card</option>
-              <option>Credit Card</option>
-              <option>Cash</option>
-              <option>Bank Transfer</option>
-              <option>UPI</option>
-              <option>Salary Account</option>
-              <option>Savings</option>
-              <option>Wallet</option>
-            </select>
-          </label>
         </div>
+
+        {/* Quick Add Account Modal */}
+        {showAddAccountModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(7, 9, 12, 0.45)',
+            backdropFilter: 'blur(10px)',
+            zIndex: 12000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            <div style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '20px',
+              padding: '24px',
+              maxWidth: '360px',
+              width: '100%',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 700 }}>Add New Account</h3>
+              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--muted)' }}>
+                Create a custom account to track expenses separately (e.g. NBK Checking, Boubyan Savings, Cash Wallet).
+              </p>
+              <label className="field" htmlFor="newAccNameInput" style={{ marginBottom: '12px' }}>
+                <span>Account Name</span>
+                <input
+                  id="newAccNameInput"
+                  type="text"
+                  placeholder="e.g. Boubyan Salary, Amex Card"
+                  value={newAccountName}
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  autoFocus
+                />
+              </label>
+              <label className="field" htmlFor="newAccCurrencyInput" style={{ marginBottom: '16px' }}>
+                <span>Currency Type</span>
+                <select
+                  id="newAccCurrencyInput"
+                  value={newAccCurrency}
+                  onChange={(e) => setNewAccCurrency(e.target.value as CurrencyCode)}
+                >
+                  <option value="KWD">KWD</option>
+                  <option value="INR">INR</option>
+                </select>
+              </label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="button button-soft"
+                  onClick={() => { setShowAddAccountModal(false); setNewAccountName(''); }}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => {
+                    if (newAccountName.trim() && onAddAccount) {
+                      onAddAccount(newAccountName.trim(), 'checking', newAccCurrency);
+                      setAccount(newAccountName.trim());
+                      setNewAccountName('');
+                      setShowAddAccountModal(false);
+                    }
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <label className="field" htmlFor="notesInput">
           <span>Details</span>

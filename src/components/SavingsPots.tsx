@@ -97,7 +97,7 @@ export const SavingsPots: React.FC<SavingsPotsProps> = ({
                       color: isCompleted ? 'var(--green)' : 'var(--muted)'
                     }}>
                       {isCompleted 
-                        ? 'Goal Met! 🎉' 
+                        ? 'Goal Met!' 
                         : `${formatMoney(pot.targetAmount - pot.currentAmount, pot.currency)} left`
                       }
                     </span>

@@ -1,83 +1,106 @@
 import { supabase } from './supabase';
-import type { User, UserLedger, Transaction, SavingsPot, CurrencyCode } from './types';
+import type { User, UserLedger, Transaction, SavingsPot, Account, CurrencyCode } from './types';
 import { createEmptyBudgets } from './utils';
+
+export function isLocalTestingMode(): boolean {
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '';
+  const forcedRemote = localStorage.getItem('qashly_local_testing_mode') === 'false';
+  if (forcedRemote) return false;
+  return isLocalHost;
+}
 
 export const dbService = {
   /**
    * Fetch all registered profiles, seeding an admin if empty
    */
   async getUsers(): Promise<User[]> {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*');
-    if (error) {
-      console.error('Supabase getUsers error:', error);
-      throw error;
-    }
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
+      if (error) {
+        console.warn('Supabase getUsers read error (using local state fallback):', error);
+      }
 
-    let list: User[] = (data || []).map((u: any) => ({
-      id: u.id,
-      name: u.name,
-      username: u.username,
-      role: u.role,
-      passwordHash: u.password_hash,
-      securityQuestion: u.security_question || '',
-      securityAnswerHash: u.security_answer_hash || '',
-      createdAt: u.created_at,
-      isFrozen: !!u.is_frozen,
-      permissions: u.permissions || {
-        savingsPots: true,
-        budgets: true,
-        transactions: true,
-      },
-    }));
+      let list: User[] = (data || []).map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        role: u.role,
+        passwordHash: u.password_hash,
+        securityQuestion: u.security_question || '',
+        securityAnswerHash: u.security_answer_hash || '',
+        createdAt: u.created_at,
+        isFrozen: !!u.is_frozen,
+        baseCurrency: u.base_currency || 'KWD',
+        permissions: u.permissions || {
+          savingsPots: true,
+          budgets: true,
+          transactions: true,
+          multiAccount: true,
+        },
+      }));
 
-    if (list.length === 0 || !list.some((u) => u.username === 'admin')) {
-      const seedAdmin: User = {
+      if (list.length === 0 || !list.some((u) => u.username === 'admin')) {
+        const seedAdmin: User = {
+          id: '00000000-0000-0000-0000-000000000000',
+          name: 'Admin',
+          username: 'admin',
+          role: 'admin',
+          passwordHash: 'b90707af3eb863de0f8e8a04156c279fbb8fee53eae979b9e40a2261fe42f6e9', // hash of admin::admin
+          securityQuestion: '',
+          securityAnswerHash: '',
+          createdAt: new Date().toISOString()
+        };
+
+        if (!isLocalTestingMode()) {
+          await supabase.from('users').upsert({
+            id: seedAdmin.id,
+            username: seedAdmin.username,
+            name: seedAdmin.name,
+            role: seedAdmin.role,
+            password_hash: seedAdmin.passwordHash,
+            security_question: '',
+            security_answer_hash: '',
+            created_at: seedAdmin.createdAt,
+            is_frozen: false,
+            permissions: {
+              savingsPots: true,
+              budgets: true,
+              transactions: true,
+              multiAccount: true,
+            }
+          });
+        }
+        list.push(seedAdmin);
+      }
+
+      return list;
+    } catch (e) {
+      console.warn('getUsers fallback to local admin user:', e);
+      return [{
         id: '00000000-0000-0000-0000-000000000000',
         name: 'Admin',
         username: 'admin',
         role: 'admin',
-        passwordHash: 'b90707af3eb863de0f8e8a04156c279fbb8fee53eae979b9e40a2261fe42f6e9', // hash of admin::admin
+        passwordHash: 'b90707af3eb863de0f8e8a04156c279fbb8fee53eae979b9e40a2261fe42f6e9',
         securityQuestion: '',
         securityAnswerHash: '',
         createdAt: new Date().toISOString()
-      };
-
-      const { error: seedError } = await supabase
-        .from('users')
-        .upsert({
-          id: seedAdmin.id,
-          username: seedAdmin.username,
-          name: seedAdmin.name,
-          role: seedAdmin.role,
-          password_hash: seedAdmin.passwordHash,
-          security_question: '',
-          security_answer_hash: '',
-          created_at: seedAdmin.createdAt,
-          is_frozen: false,
-          permissions: {
-            savingsPots: true,
-            budgets: true,
-            transactions: true
-          }
-        });
-
-      if (!seedError) {
-        list.push(seedAdmin);
-      } else {
-        console.error('Supabase seeding admin error:', seedError);
-        throw seedError;
-      }
+      }];
     }
-
-    return list;
   },
 
   /**
    * Register or update a user profile
    */
   async saveUser(user: User): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: saveUser executed in local state only. DB protected.', user.name);
+      return;
+    }
     const { error } = await supabase
       .from('users')
       .upsert({
@@ -90,10 +113,12 @@ export const dbService = {
         security_answer_hash: user.securityAnswerHash || '',
         created_at: user.createdAt,
         is_frozen: !!user.isFrozen,
+        base_currency: user.baseCurrency || 'KWD',
         permissions: user.permissions || {
           savingsPots: true,
           budgets: true,
-          transactions: true
+          transactions: true,
+          multiAccount: true,
         }
       });
     if (error) {
@@ -103,7 +128,7 @@ export const dbService = {
   },
 
   /**
-   * Fetch complete user ledger (transactions, budgets, savings pots)
+   * Fetch complete user ledger (transactions, budgets, savings pots, accounts)
    */
   async getUserLedger(userId: string): Promise<UserLedger> {
     const [txRes, bRes, sRes] = await Promise.all([
@@ -150,10 +175,35 @@ export const dbService = {
       reconciled: !!t.reconciled,
     }));
 
+    // Parse user custom accounts list (with local storage sync fallback)
+    let accountsArr: Account[] = [];
+    try {
+      const { data: accData, error: accErr } = await supabase.from('user_accounts').select('*').eq('user_id', userId);
+      if (!accErr && accData && accData.length > 0) {
+        accountsArr = accData.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          type: a.type || 'checking',
+          currency: a.currency || 'KWD',
+        }));
+      } else {
+        const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
+        if (rawLoc) {
+          accountsArr = JSON.parse(rawLoc);
+        }
+      }
+    } catch {
+      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
+      if (rawLoc) {
+        accountsArr = JSON.parse(rawLoc);
+      }
+    }
+
     return {
       transactions: transactionsArr,
       budgets: budgetsObj,
       savingsPots: savingsPotsArr,
+      accounts: accountsArr,
     };
   },
 
@@ -161,6 +211,10 @@ export const dbService = {
    * Save or edit a transaction record
    */
   async saveTransaction(userId: string, tx: Transaction): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: saveTransaction executed in local state only. DB protected.', tx.id);
+      return;
+    }
     const { error } = await supabase
       .from('transactions')
       .upsert({
@@ -186,7 +240,10 @@ export const dbService = {
    * Delete a transaction record
    */
   async deleteTransaction(_userId: string, txId: string): Promise<void> {
-    // Note: userId is included for consistency with the fallback logic, but not strictly needed for Supabase delete
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: deleteTransaction executed in local state only. DB protected.', txId);
+      return;
+    }
     const { error } = await supabase
       .from('transactions')
       .delete()
@@ -201,6 +258,10 @@ export const dbService = {
    * Delete multiple transaction records in bulk
    */
   async deleteTransactions(_userId: string, txIds: string[]): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: deleteTransactions executed in local state only. DB protected.', txIds);
+      return;
+    }
     const { error } = await supabase
       .from('transactions')
       .delete()
@@ -215,6 +276,10 @@ export const dbService = {
    * Save or edit multiple transaction records in bulk
    */
   async saveTransactions(userId: string, txs: Transaction[]): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: saveTransactions executed in local state only. DB protected.', txs.length);
+      return;
+    }
     const rows = txs.map((tx) => ({
       id: tx.id,
       user_id: userId,
@@ -241,6 +306,10 @@ export const dbService = {
    * Set or update category budget limits
    */
   async saveBudget(userId: string, currency: CurrencyCode, category: string, amount: number): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: saveBudget executed in local state only. DB protected.', category);
+      return;
+    }
     const { error } = await supabase
       .from('budgets')
       .upsert(
@@ -262,6 +331,10 @@ export const dbService = {
    * Save or edit a savings pot details
    */
   async saveSavingsPot(userId: string, pot: SavingsPot): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: saveSavingsPot executed in local state only. DB protected.', pot.name);
+      return;
+    }
     const { error } = await supabase
       .from('savings_pots')
       .upsert({
@@ -282,6 +355,10 @@ export const dbService = {
    * Delete a savings pot
    */
   async deleteSavingsPot(_userId: string, potId: string): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: deleteSavingsPot executed in local state only. DB protected.', potId);
+      return;
+    }
     const { error } = await supabase
       .from('savings_pots')
       .delete()
@@ -293,16 +370,78 @@ export const dbService = {
   },
 
   /**
+   * Save or update a custom user account
+   */
+  async saveAccount(userId: string, account: Account): Promise<void> {
+    if (!isLocalTestingMode()) {
+      try {
+        await supabase.from('user_accounts').upsert({
+          id: account.id,
+          user_id: userId,
+          name: account.name,
+          type: account.type || 'checking',
+          currency: account.currency || 'KWD',
+        });
+      } catch (e) {
+        console.warn('Supabase saveAccount table unconfirmed, fallback to localStorage:', e);
+      }
+    }
+    try {
+      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
+      let list: Account[] = rawLoc ? JSON.parse(rawLoc) : [];
+      const idx = list.findIndex((a) => a.id === account.id);
+      if (idx >= 0) {
+        list[idx] = account;
+      } else {
+        list.push(account);
+      }
+      localStorage.setItem(`qashly_accounts_${userId}`, JSON.stringify(list));
+    } catch (e) {
+      console.error('Failed to sync accounts in localStorage', e);
+    }
+  },
+
+  /**
+   * Delete a custom user account
+   */
+  async deleteAccount(userId: string, accountId: string): Promise<void> {
+    if (!isLocalTestingMode()) {
+      try {
+        await supabase.from('user_accounts').delete().eq('id', accountId);
+      } catch (e) {
+        console.warn('Supabase deleteAccount table unconfirmed, fallback to localStorage:', e);
+      }
+    }
+    try {
+      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
+      if (rawLoc) {
+        let list: Account[] = JSON.parse(rawLoc);
+        list = list.filter((a) => a.id !== accountId);
+        localStorage.setItem(`qashly_accounts_${userId}`, JSON.stringify(list));
+      }
+    } catch (e) {
+      console.error('Failed to delete account in localStorage', e);
+    }
+  },
+
+  /**
    * Reset user ledger balances (clear all)
    */
   async clearLedger(userId: string): Promise<void> {
+    if (isLocalTestingMode()) {
+      console.log('🧪 Local Testing Mode: clearLedger executed in local state only. DB protected.');
+      localStorage.removeItem(`qashly_accounts_${userId}`);
+      return;
+    }
     const [txErr, bErr, sErr] = await Promise.all([
       supabase.from('transactions').delete().eq('user_id', userId),
       supabase.from('budgets').delete().eq('user_id', userId),
       supabase.from('savings_pots').delete().eq('user_id', userId),
+      supabase.from('user_accounts').delete().eq('user_id', userId),
     ]);
     if (txErr.error) console.error('Supabase clear transactions error:', txErr.error);
     if (bErr.error) console.error('Supabase clear budgets error:', bErr.error);
     if (sErr.error) console.error('Supabase clear savings pots error:', sErr.error);
+    localStorage.removeItem(`qashly_accounts_${userId}`);
   },
 };

@@ -74,7 +74,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
         permissions: {
           savingsPots: true,
           budgets: true,
-          transactions: true
+          transactions: true,
+          multiAccount: true,
         }
       };
 
@@ -123,8 +124,8 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
-  const handleTogglePermission = async (user: User, perm: 'savingsPots' | 'budgets' | 'transactions') => {
-    const currentPerms = user.permissions || { savingsPots: true, budgets: true, transactions: true };
+  const handleTogglePermission = async (user: User, perm: 'savingsPots' | 'budgets' | 'transactions' | 'multiAccount') => {
+    const currentPerms = user.permissions || { savingsPots: true, budgets: true, transactions: true, multiAccount: true };
     const updated: User = {
       ...user,
       permissions: {
@@ -376,6 +377,16 @@ export const AdminView: React.FC<AdminViewProps> = ({
                               style={{ width: '14px', height: '14px', accentColor: 'var(--blue)' }}
                             />
                             Savings Pots
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer', color: 'var(--text)' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!(user.permissions?.multiAccount ?? true)}
+                              onChange={() => handleTogglePermission(user, 'multiAccount')}
+                              disabled={user.username === 'admin'}
+                              style={{ width: '14px', height: '14px', accentColor: 'var(--blue)' }}
+                            />
+                            Multi-Account
                           </label>
                         </div>
                       </td>

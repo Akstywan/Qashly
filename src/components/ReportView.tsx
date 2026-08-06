@@ -96,30 +96,30 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
     // Overall summary statement
     if (netVariance > 0) {
-      insights.push(`🎉 Great job! You spent ${formatMoney(netVariance, dashboardCurrency)} less than your overall budget this month.`);
+      insights.push(`Great job! You spent ${formatMoney(netVariance, dashboardCurrency)} less than your overall budget this month.`);
     } else if (netVariance < 0) {
-      insights.push(`⚠️ Attention: You exceeded your overall budget limit by ${formatMoney(Math.abs(netVariance), dashboardCurrency)}.`);
+      insights.push(`Attention: You exceeded your overall budget limit by ${formatMoney(Math.abs(netVariance), dashboardCurrency)}.`);
     } else {
-      insights.push(`🎯 Balanced month: Your total expenses exactly matched your budget limits.`);
+      insights.push(`Balanced month: Your total expenses exactly matched your budget limits.`);
     }
 
     // Deficit warning
     if (overBudgetCats.length > 0) {
       const list = overBudgetCats.map((c) => `${c.category} (exceeded by ${formatMoney(Math.abs(c.difference), dashboardCurrency)})`).join(', ');
-      insights.push(`🔴 Deficit Warning: You went over budget in these categories: ${list}.`);
+      insights.push(`Deficit Warning: You went over budget in these categories: ${list}.`);
     }
 
     // Surplus callout
     if (savedCats.length > 0) {
       // Find category with largest savings
       const topSavings = [...savedCats].sort((a, b) => b.difference - a.difference)[0];
-      insights.push(`🟢 Top Savings: You had the largest surplus in "${topSavings.category}", saving ${formatMoney(topSavings.difference, dashboardCurrency)} of the allocated limit.`);
+      insights.push(`Top Savings: You had the largest surplus in "${topSavings.category}", saving ${formatMoney(topSavings.difference, dashboardCurrency)} of the allocated limit.`);
     }
 
     // Unbudgeted spending warnings
     if (unbudgetedCats.length > 0) {
       const totalUnbudgeted = unbudgetedCats.reduce((sum, r) => sum + r.spent, 0);
-      insights.push(`ℹ️ Unbudgeted Activity: You spent a total of ${formatMoney(totalUnbudgeted, dashboardCurrency)} across categories that did not have budget caps configured (such as ${unbudgetedCats.map(c => c.category).slice(0, 3).join(', ')}).`);
+      insights.push(`Unbudgeted Activity: You spent a total of ${formatMoney(totalUnbudgeted, dashboardCurrency)} across categories that did not have budget caps configured (such as ${unbudgetedCats.map(c => c.category).slice(0, 3).join(', ')}).`);
     }
 
     return insights;
