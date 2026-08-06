@@ -127,21 +127,27 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     }
   }, [entryType]);
 
-  // Keep account/payment mode valid for current currency (INR vs KWD)
+  // Keep payment mode & account updated based on user preferences and selected currency
   useEffect(() => {
     if (!editingTransaction) {
-      const modes = getPaymentModesForCurrency(currency, accounts);
-      if (!modes.includes(account)) {
-        const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
-        const prefMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
-        if (prefMode && modes.includes(prefMode)) {
-          setAccount(prefMode);
-        } else {
-          setAccount(modes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
-        }
+      const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+      
+      const currentModes = getPaymentModesForCurrency(currency, accounts);
+      const defMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
+      if (defMode && currentModes.includes(defMode)) {
+        setPaymentMode(defMode);
+      } else if (!currentModes.includes(paymentMode)) {
+        setPaymentMode(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+      }
+
+      const prefAcc = prefs.defaultDisplayAccount;
+      if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
+        setAccount(prefAcc);
+      } else if (accounts.length > 0 && !accounts.some((a) => a.name === account)) {
+        setAccount(accounts[0].name);
       }
     }
-  }, [currency, accounts]);
+  }, [currency, accounts, activeUserId, editingTransaction]);
 
   const resetForm = () => {
     setEntryType('expense');
@@ -160,10 +166,20 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     const currentModes = getPaymentModesForCurrency(currency, accounts);
     const defMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
     if (defMode && currentModes.includes(defMode)) {
-      setAccount(defMode);
+      setPaymentMode(defMode);
     } else {
-      setAccount(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+      setPaymentMode(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
     }
+
+    const prefAcc = prefs.defaultDisplayAccount;
+    if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
+      setAccount(prefAcc);
+    } else if (accounts.length > 0) {
+      setAccount(accounts[0].name);
+    } else {
+      setAccount('');
+    }
+
     setNotes('');
   };
 
