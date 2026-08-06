@@ -62,7 +62,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   const [merchant, setMerchant] = useState('');
   const [date, setDate] = useState(defaultEntryDate(month));
   const [category, setCategory] = useState('');
-  const [account, setAccount] = useState(accounts[0]?.name || 'Main Account');
+  const [account, setAccount] = useState(accounts[0]?.name || '');
   const [paymentMode, setPaymentMode] = useState<string>('KNET / Debit Card');
   const [notes, setNotes] = useState('');
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
@@ -86,7 +86,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setMerchant(editingTransaction.merchant);
       setDate(editingTransaction.date);
       setCategory(editingTransaction.category);
-      setAccount(editingTransaction.account || accounts[0]?.name || 'Main Account');
+      setAccount(editingTransaction.account || accounts[0]?.name || '');
       setPaymentMode(editingTransaction.paymentMode || (editingTransaction.currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
       setNotes(editingTransaction.notes || '');
     } else {
@@ -372,7 +372,9 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
                 value={account}
                 onChange={(e) => setAccount(e.target.value)}
               >
-                <option value="Main Account">Main Account</option>
+                {(accounts || []).length === 0 && (
+                  <option value="">-- Select Account --</option>
+                )}
                 {(accounts || []).map((acc) => (
                   <option key={acc.id} value={acc.name}>
                     {acc.name} ({acc.currency || 'KWD'})

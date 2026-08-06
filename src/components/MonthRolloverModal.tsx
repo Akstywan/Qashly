@@ -42,7 +42,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   const [sourceMonthKey, setSourceMonthKey] = useState<string>(getPreviousMonthKey(currentMonthKey));
   const [targetMonthKey, setTargetMonthKey] = useState<string>(currentMonthKey);
   const [amountInput, setAmountInput] = useState<string>('');
-  const [selectedAccount, setSelectedAccount] = useState<string>('Main Account');
+  const [selectedAccount, setSelectedAccount] = useState<string>(userAccounts[0]?.name || '');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('KNET / Debit Card');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -57,7 +57,10 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
     setCurrency(defaultCurrency);
     setSourceMonthKey(getPreviousMonthKey(currentMonthKey));
     setTargetMonthKey(currentMonthKey);
-  }, [currentMonthKey, defaultCurrency, isOpen]);
+    if (userAccounts.length > 0 && !userAccounts.some((a) => a.name === selectedAccount)) {
+      setSelectedAccount(userAccounts[0].name);
+    }
+  }, [currentMonthKey, defaultCurrency, isOpen, userAccounts]);
 
   useEffect(() => {
     const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency);
@@ -289,7 +292,9 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
                   outline: 'none'
                 }}
               >
-                <option value="Main Account">Main Account</option>
+                {userAccounts.length === 0 && (
+                  <option value="">-- Select Account --</option>
+                )}
                 {userAccounts.map((acc) => (
                   <option key={acc.id} value={acc.name}>
                     {acc.name}

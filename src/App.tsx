@@ -50,9 +50,9 @@ export const App: React.FC = () => {
   const [prefDefaultDisplayAccount, setPrefDefaultDisplayAccount] = useState<string>('all');
   const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
   const [showMonthRolloverModal, setShowMonthRolloverModal] = useState<boolean>(false);
-  const [transferFromAccount, setTransferFromAccount] = useState<string>('Main Account');
+  const [transferFromAccount, setTransferFromAccount] = useState<string>('');
   const [transferFromMode, setTransferFromMode] = useState<string>('KNET / Debit Card');
-  const [transferToAccount, setTransferToAccount] = useState<string>('Main Account');
+  const [transferToAccount, setTransferToAccount] = useState<string>('');
   const [transferToMode, setTransferToMode] = useState<string>('Cash');
   const [transferAmount, setTransferAmount] = useState<string>('');
   const [transferCurrency, setTransferCurrency] = useState<CurrencyCode>('KWD');
@@ -167,8 +167,8 @@ export const App: React.FC = () => {
       return;
     }
 
-    const sourceLabel = transferFromAccount || 'Main Account';
-    const destLabel = transferToAccount || 'Main Account';
+    const sourceLabel = transferFromAccount || activeLedger.accounts?.[0]?.name || '';
+    const destLabel = transferToAccount || activeLedger.accounts?.[0]?.name || '';
     if (sourceLabel === destLabel && transferFromMode === transferToMode) {
       showCustomAlert('Transfer Error', 'Source and destination account/mode cannot be identical.', 'error');
       return;
@@ -2001,10 +2001,12 @@ export const App: React.FC = () => {
                 <label className="field">
                   <span>From Account</span>
                   <select
-                    value={transferFromAccount}
+                    value={transferFromAccount || activeLedger.accounts?.[0]?.name || ''}
                     onChange={(e) => setTransferFromAccount(e.target.value)}
                   >
-                    <option value="Main Account">Main Account</option>
+                    {(activeLedger.accounts || []).length === 0 && (
+                      <option value="">-- Select Account --</option>
+                    )}
                     {(activeLedger.accounts || []).map(acc => (
                       <option key={acc.id} value={acc.name}>
                         {acc.name} ({acc.currency || 'KWD'})
@@ -2030,10 +2032,12 @@ export const App: React.FC = () => {
                 <label className="field">
                   <span>To Account</span>
                   <select
-                    value={transferToAccount}
+                    value={transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || ''}
                     onChange={(e) => setTransferToAccount(e.target.value)}
                   >
-                    <option value="Main Account">Main Account</option>
+                    {(activeLedger.accounts || []).length === 0 && (
+                      <option value="">-- Select Account --</option>
+                    )}
                     {(activeLedger.accounts || []).map(acc => (
                       <option key={acc.id} value={acc.name}>
                         {acc.name} ({acc.currency || 'KWD'})
