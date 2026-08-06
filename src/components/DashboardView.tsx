@@ -160,10 +160,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const allCategories = [...new Set([...expenseCategories, ...incomeCategories])];
 
   const renderMoneyStack = (totals: { KWD: number; INR: number }) => {
+    const primaryCurr = dashboardCurrency;
+    const secondaryCurr = dashboardCurrency === 'INR' ? 'KWD' : 'INR';
     return (
       <>
-        <span className="money-line">{formatMoney(totals.KWD, 'KWD')}</span>
-        <span className="money-line secondary">{formatMoney(totals.INR, 'INR')}</span>
+        <span className="money-line">{formatMoney(totals[primaryCurr], primaryCurr)}</span>
+        <span className="money-line secondary">{formatMoney(totals[secondaryCurr], secondaryCurr)}</span>
       </>
     );
   };

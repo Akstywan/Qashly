@@ -3,12 +3,10 @@ import type { User, UserLedger, Transaction, SavingsPot, Account, CurrencyCode }
 import { createEmptyBudgets } from './utils';
 
 export function isLocalTestingMode(): boolean {
-  if (typeof window === 'undefined') return true;
-  const host = window.location.hostname;
-  const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '';
-  const forcedRemote = localStorage.getItem('qashly_local_testing_mode') === 'false';
-  if (forcedRemote) return false;
-  return isLocalHost;
+  if (typeof window === 'undefined') return false;
+  const forcedLocal = localStorage.getItem('qashly_local_testing_mode') === 'true';
+  if (forcedLocal) return true;
+  return false;
 }
 
 export const dbService = {

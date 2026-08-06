@@ -19,6 +19,7 @@ interface EntryPanelProps {
   onTransactionCurrencyChange: (currency: CurrencyCode) => void;
   hideOnMobile?: boolean;
   accounts?: Account[];
+  selectedAccount?: string;
   activeUserId?: string;
   permissions?: {
     savingsPots?: boolean;
@@ -53,6 +54,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   onTransactionCurrencyChange,
   hideOnMobile,
   accounts = [],
+  selectedAccount,
   activeUserId,
   onAddAccount,
 }) => {
@@ -75,6 +77,58 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setAccount(accounts[0].name);
     }
   }, [accounts, editingTransaction]);
+
+  // Auto-sync account state when parent selectedAccount changes
+  useEffect(() => {
+    if (!editingTransaction && selectedAccount && selectedAccount !== 'all') {
+      const match = accounts.find((a) => a.name === selectedAccount);
+      if (match) {
+        setAccount(match.name);
+      }
+    }
+  }, [selectedAccount, accounts, editingTransaction]);
+
+  // Auto-sync account dropdown selection to match active currency
+  useEffect(() => {
+    if (!editingTransaction && currency && accounts.length > 0) {
+      const currentAccObj = accounts.find((a) => a.name === account);
+      if (!currentAccObj || currentAccObj.currency !== currency) {
+        const matchingAcc = accounts.find((a) => a.currency === currency);
+        if (matchingAcc) {
+          setAccount(matchingAcc.name);
+        }
+      }
+    }
+  }, [currency, accounts, editingTransaction]);
+
+  // Auto-sync currency & payment mode when account selection changes
+  useEffect(() => {
+    if (!editingTransaction && account) {
+      const selectedAccObj = accounts.find((a) => a.name === account);
+      if (selectedAccObj && selectedAccObj.currency) {
+        const accCurr = selectedAccObj.currency;
+        if (currency !== accCurr) {
+          setCurrency(accCurr);
+          onTransactionCurrencyChange(accCurr);
+        }
+        const validModes = getPaymentModesForCurrency(accCurr, []);
+        if (!validModes.includes(paymentMode)) {
+          setPaymentMode(validModes[0] || (accCurr === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+        }
+      }
+    }
+  }, [account, accounts, editingTransaction]);
+
+  // Auto-sync currency state when transactionCurrency prop changes from parent
+  useEffect(() => {
+    if (!editingTransaction && transactionCurrency) {
+      setCurrency(transactionCurrency);
+      const validModes = getPaymentModesForCurrency(transactionCurrency, []);
+      if (!validModes.includes(paymentMode)) {
+        setPaymentMode(validModes[0] || (transactionCurrency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+      }
+    }
+  }, [transactionCurrency, editingTransaction]);
 
   // Handle editing mode change
   useEffect(() => {

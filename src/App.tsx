@@ -14,7 +14,8 @@ import {
   getPaymentModesForCurrency,
   getPreviousMonthKey,
   calculateMonthNetBalance,
-  formatMonthLabel
+  formatMonthLabel,
+  fetchLiveExchangeRate
 } from './utils';
 import { dbService } from './dbService';
 import AuthScreen from './components/AuthScreen';
@@ -55,8 +56,9 @@ export const App: React.FC = () => {
   const [transferToAccount, setTransferToAccount] = useState<string>('');
   const [transferToMode, setTransferToMode] = useState<string>('Cash');
   const [transferAmount, setTransferAmount] = useState<string>('');
-  const [transferCurrency, setTransferCurrency] = useState<CurrencyCode>('KWD');
+  const [transferDestAmount, setTransferDestAmount] = useState<string>('');
   const [transferNotes, setTransferNotes] = useState<string>('');
+  const [liveExchangeRate, setLiveExchangeRate] = useState<number | null>(null);
   const [showBaseCurrencyPromptModal, setShowBaseCurrencyPromptModal] = useState<boolean>(false);
   const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -65,6 +67,46 @@ export const App: React.FC = () => {
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState('');
+
+  // Auto-sync currency to selected topbar account's assigned currency
+  useEffect(() => {
+    if (selectedAccount && selectedAccount !== 'all') {
+      const activeL = activeUserId ? userData[activeUserId] : null;
+      const accs = activeL?.accounts || [];
+      const matchAcc = accs.find((a) => a.name === selectedAccount);
+      if (matchAcc && matchAcc.currency) {
+        setTransactionCurrency(matchAcc.currency);
+        setDashboardCurrency(matchAcc.currency);
+      }
+    }
+  }, [selectedAccount, activeUserId, userData]);
+
+  // Auto-fetch live exchange rate dynamically when cross-currency transfer modal is active
+  useEffect(() => {
+    let isSubscribed = true;
+    const activeL = activeUserId ? userData[activeUserId] : null;
+    const accs = activeL?.accounts || [];
+    const fromAccName = transferFromAccount || accs[0]?.name || '';
+    const toAccName = transferToAccount || accs[1]?.name || accs[0]?.name || '';
+    const fromAccObj = accs.find((a) => a.name === fromAccName);
+    const toAccObj = accs.find((a) => a.name === toAccName);
+    const fromCurr: CurrencyCode = fromAccObj?.currency || 'KWD';
+    const toCurr: CurrencyCode = toAccObj?.currency || 'INR';
+
+    if (showTransferModal && fromCurr !== toCurr) {
+      fetchLiveExchangeRate(fromCurr, toCurr).then((rate) => {
+        if (isSubscribed) {
+          setLiveExchangeRate(rate);
+          if (transferAmount && Number(transferAmount) > 0) {
+            setTransferDestAmount((Number(transferAmount) * rate).toFixed(toCurr === 'INR' ? 2 : 3));
+          }
+        }
+      });
+    } else {
+      setLiveExchangeRate(null);
+    }
+    return () => { isSubscribed = false; };
+  }, [showTransferModal, transferFromAccount, transferToAccount, activeUserId, userData]);
 
   // Auto-prompt Month Rollover modal when entering a month with unhandled previous balance
   useEffect(() => {
@@ -161,28 +203,47 @@ export const App: React.FC = () => {
 
   const handleExecuteTransfer = async () => {
     if (!activeUserId) return;
-    const amountNum = Number(transferAmount);
-    if (!amountNum || amountNum <= 0) {
+    const sourceAmountNum = Number(transferAmount);
+    if (!sourceAmountNum || sourceAmountNum <= 0) {
       showCustomAlert('Transfer Error', 'Please enter a valid transfer amount.', 'error');
       return;
     }
 
-    const sourceLabel = transferFromAccount || activeLedger.accounts?.[0]?.name || '';
-    const destLabel = transferToAccount || activeLedger.accounts?.[0]?.name || '';
+    const sourceLabel = transferFromAccount || activeLedger.accounts?.[0]?.name || 'Main Account';
+    const destLabel = transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || 'Main Account';
     if (sourceLabel === destLabel && transferFromMode === transferToMode) {
       showCustomAlert('Transfer Error', 'Source and destination account/mode cannot be identical.', 'error');
       return;
     }
 
+    const fromAccObj = (activeLedger.accounts || []).find((a) => a.name === sourceLabel);
+    const toAccObj = (activeLedger.accounts || []).find((a) => a.name === destLabel);
+
+    const fromCurr: CurrencyCode = fromAccObj?.currency || 'KWD';
+    const toCurr: CurrencyCode = toAccObj?.currency || 'INR';
+    const isCross = fromCurr !== toCurr;
+
+    let destAmountNum = sourceAmountNum;
+    if (isCross) {
+      destAmountNum = Number(transferDestAmount);
+      if (!destAmountNum || destAmountNum <= 0) {
+        showCustomAlert('Transfer Error', `Please enter a valid credit amount in ${toCurr}.`, 'error');
+        return;
+      }
+    }
+
     const transferDate = defaultEntryDate(month);
-    const noteText = transferNotes.trim() ? transferNotes.trim() : `Transfer from ${sourceLabel} (${transferFromMode}) to ${destLabel} (${transferToMode})`;
+    const rateText = isCross ? ` (@ rate: ${sourceAmountNum} ${fromCurr} = ${destAmountNum} ${toCurr})` : '';
+    const noteText = transferNotes.trim()
+      ? transferNotes.trim()
+      : `Transfer from ${sourceLabel} (${transferFromMode}) to ${destLabel} (${transferToMode})${rateText}`;
 
     const outflowTx: Transaction = {
       id: createId(),
       type: 'expense',
-      currency: transferCurrency,
-      amount: amountNum,
-      merchant: `Transfer to ${destLabel} (${transferToMode})`,
+      currency: fromCurr,
+      amount: sourceAmountNum,
+      merchant: `Transfer to ${destLabel} (${transferToMode})${isCross ? ` [Credited: ${destAmountNum} ${toCurr}]` : ''}`,
       date: transferDate,
       category: 'Transfer',
       account: sourceLabel,
@@ -193,9 +254,9 @@ export const App: React.FC = () => {
     const inflowTx: Transaction = {
       id: createId(),
       type: 'income',
-      currency: transferCurrency,
-      amount: amountNum,
-      merchant: `Transfer from ${sourceLabel} (${transferFromMode})`,
+      currency: toCurr,
+      amount: destAmountNum,
+      merchant: `Transfer from ${sourceLabel} (${transferFromMode})${isCross ? ` [Debited: ${sourceAmountNum} ${fromCurr}]` : ''}`,
       date: transferDate,
       category: 'Transfer',
       account: destLabel,
@@ -220,8 +281,13 @@ export const App: React.FC = () => {
 
       setShowTransferModal(false);
       setTransferAmount('');
+      setTransferDestAmount('');
       setTransferNotes('');
-      showCustomAlert('Transfer Complete', `Transferred ${amountNum} ${transferCurrency} from "${sourceLabel} (${transferFromMode})" to "${destLabel} (${transferToMode})".`, 'success');
+      showCustomAlert(
+        'Transfer Complete',
+        `Transferred ${sourceAmountNum} ${fromCurr} from "${sourceLabel}" to "${destLabel}" (${destAmountNum} ${toCurr} credited).`,
+        'success'
+      );
     } catch (error) {
       showCustomAlert('Database Error', 'Failed to complete account transfer.', 'error');
     }
@@ -236,6 +302,8 @@ export const App: React.FC = () => {
     onConfirm: (val?: string) => void;
     onCancel?: () => void;
     tone?: 'success' | 'error' | 'warning' | 'info';
+    isPassword?: boolean;
+    placeholder?: string;
   }>({
     show: false,
     title: '',
@@ -282,15 +350,23 @@ export const App: React.FC = () => {
     });
   };
 
-  const showCustomPrompt = (title: string, description: string, tone: 'info' | 'warning' = 'info') => {
+  const showCustomPrompt = (
+    title: string,
+    description: string,
+    tone: 'info' | 'warning' = 'info',
+    isPassword = false,
+    placeholder = ''
+  ) => {
     return new Promise<string | null>((resolve) => {
-      setModalPromptInput('');
+      setModalPromptInput(placeholder || '');
       setModalState({
         show: true,
         title,
         description,
         type: 'prompt',
         tone,
+        isPassword,
+        placeholder,
         onConfirm: (val) => {
           setModalState(prev => ({ ...prev, show: false }));
           resolve(val || '');
@@ -976,7 +1052,9 @@ export const App: React.FC = () => {
     const newName = await showCustomPrompt(
       'Rename Account',
       `Enter new name for account "${account.name}":`,
-      'info'
+      'info',
+      false, // isPassword = false
+      account.name
     );
     if (!newName || !newName.trim() || newName.trim() === account.name) return;
 
@@ -1206,6 +1284,7 @@ export const App: React.FC = () => {
                 onTransactionCurrencyChange={setTransactionCurrency}
                 hideOnMobile={currentView === 'dashboard'}
                 accounts={activeLedger.accounts || []}
+                selectedAccount={selectedAccount}
                 activeUserId={activeUserId || undefined}
                 permissions={currentUser?.permissions}
                 onAddAccount={handleAddAccount}
@@ -1348,8 +1427,8 @@ export const App: React.FC = () => {
 
             {modalState.type === 'prompt' && (
               <input
-                type="password"
-                placeholder="Enter password"
+                type={modalState.isPassword ? 'password' : 'text'}
+                placeholder={modalState.placeholder || 'Enter value...'}
                 value={modalPromptInput}
                 onChange={(e) => setModalPromptInput(e.target.value)}
                 style={{
@@ -1961,132 +2040,202 @@ export const App: React.FC = () => {
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
               Transfer funds between your checking, savings, credit cards, or custom accounts.
             </p>
+            {(() => {
+              const currentFromAccName = transferFromAccount || activeLedger.accounts?.[0]?.name || '';
+              const currentToAccName = transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || '';
 
-            <form onSubmit={(e) => { e.preventDefault(); handleExecuteTransfer(); }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <label className="field" style={{ flex: 1 }}>
-                  <span>Amount</span>
-                  <input
-                    type="number"
-                    step="any"
-                    placeholder="0.000"
-                    value={transferAmount}
-                    onChange={(e) => setTransferAmount(e.target.value)}
-                    autoFocus
-                    required
-                  />
-                </label>
+              const fromAccObj = (activeLedger.accounts || []).find(a => a.name === currentFromAccName);
+              const toAccObj = (activeLedger.accounts || []).find(a => a.name === currentToAccName);
 
-                <label className="field" style={{ width: '100px' }}>
-                  <span>Currency</span>
-                  <select
-                    value={transferCurrency}
-                    onChange={(e) => {
-                      const newCurr = e.target.value as CurrencyCode;
-                      setTransferCurrency(newCurr);
-                      const modes = getPaymentModesForCurrency(newCurr, activeLedger.accounts || []);
-                      if (modes.length > 0) {
-                        setTransferFromAccount(modes[0]);
-                        setTransferToAccount(modes[1] || modes[0]);
-                      }
-                    }}
-                  >
-                    <option value="KWD">KWD</option>
-                    <option value="INR">INR</option>
-                  </select>
-                </label>
-              </div>
+              const fromCurr: CurrencyCode = fromAccObj?.currency || 'KWD';
+              const toCurr: CurrencyCode = toAccObj?.currency || 'INR';
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <label className="field">
-                  <span>From Account</span>
-                  <select
-                    value={transferFromAccount || activeLedger.accounts?.[0]?.name || ''}
-                    onChange={(e) => setTransferFromAccount(e.target.value)}
-                  >
-                    {(activeLedger.accounts || []).length === 0 && (
-                      <option value="">-- Select Account --</option>
-                    )}
-                    {(activeLedger.accounts || []).map(acc => (
-                      <option key={acc.id} value={acc.name}>
-                        {acc.name} ({acc.currency || 'KWD'})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              const isCrossCurrency = fromCurr !== toCurr;
 
-                <label className="field">
-                  <span>From Payment Mode</span>
-                  <select
-                    value={transferFromMode}
-                    onChange={(e) => setTransferFromMode(e.target.value)}
-                  >
-                    {getPaymentModesForCurrency(transferCurrency, []).map(mode => (
-                      <option key={mode} value={mode}>{mode}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              return (
+                <form onSubmit={(e) => { e.preventDefault(); handleExecuteTransfer(); }} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Account selection row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <label className="field">
+                      <span>From Account</span>
+                      <select
+                        value={currentFromAccName}
+                        onChange={(e) => {
+                          setTransferFromAccount(e.target.value);
+                          const selectedAcc = (activeLedger.accounts || []).find(a => a.name === e.target.value);
+                          if (selectedAcc && selectedAcc.currency) {
+                            const modes = getPaymentModesForCurrency(selectedAcc.currency, []);
+                            setTransferFromMode(modes[0]);
+                          }
+                        }}
+                      >
+                        {(activeLedger.accounts || []).length === 0 && (
+                          <option value="">-- Select Account --</option>
+                        )}
+                        {(activeLedger.accounts || []).map(acc => (
+                          <option key={acc.id} value={acc.name}>
+                            {acc.name} ({acc.currency || 'KWD'})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <label className="field">
-                  <span>To Account</span>
-                  <select
-                    value={transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || ''}
-                    onChange={(e) => setTransferToAccount(e.target.value)}
-                  >
-                    {(activeLedger.accounts || []).length === 0 && (
-                      <option value="">-- Select Account --</option>
-                    )}
-                    {(activeLedger.accounts || []).map(acc => (
-                      <option key={acc.id} value={acc.name}>
-                        {acc.name} ({acc.currency || 'KWD'})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <label className="field">
+                      <span>From Payment Mode</span>
+                      <select
+                        value={transferFromMode}
+                        onChange={(e) => setTransferFromMode(e.target.value)}
+                      >
+                        {getPaymentModesForCurrency(fromCurr, []).map(mode => (
+                          <option key={mode} value={mode}>{mode}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-                <label className="field">
-                  <span>To Payment Mode</span>
-                  <select
-                    value={transferToMode}
-                    onChange={(e) => setTransferToMode(e.target.value)}
-                  >
-                    {getPaymentModesForCurrency(transferCurrency, []).map(mode => (
-                      <option key={mode} value={mode}>{mode}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                    <label className="field">
+                      <span>To Account</span>
+                      <select
+                        value={currentToAccName}
+                        onChange={(e) => {
+                          setTransferToAccount(e.target.value);
+                          const selectedAcc = (activeLedger.accounts || []).find(a => a.name === e.target.value);
+                          if (selectedAcc && selectedAcc.currency) {
+                            const modes = getPaymentModesForCurrency(selectedAcc.currency, []);
+                            setTransferToMode(modes[0]);
+                          }
+                        }}
+                      >
+                        {(activeLedger.accounts || []).length === 0 && (
+                          <option value="">-- Select Account --</option>
+                        )}
+                        {(activeLedger.accounts || []).map(acc => (
+                          <option key={acc.id} value={acc.name}>
+                            {acc.name} ({acc.currency || 'KWD'})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
 
-              <label className="field">
-                <span>Notes / Purpose (Optional)</span>
-                <input
-                  type="text"
-                  placeholder="e.g. Monthly savings, card payment"
-                  value={transferNotes}
-                  onChange={(e) => setTransferNotes(e.target.value)}
-                />
-              </label>
+                    <label className="field">
+                      <span>To Payment Mode</span>
+                      <select
+                        value={transferToMode}
+                        onChange={(e) => setTransferToMode(e.target.value)}
+                      >
+                        {getPaymentModesForCurrency(toCurr, []).map(mode => (
+                          <option key={mode} value={mode}>{mode}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                <button
-                  type="button"
-                  className="button button-soft"
-                  onClick={() => setShowTransferModal(false)}
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="button button-primary"
-                  style={{ flex: 1 }}
-                >
-                  Complete Transfer
-                </button>
-              </div>
-            </form>
+                  {/* Amounts row - single or cross currency */}
+                  {!isCrossCurrency ? (
+                    <label className="field">
+                      <span>Amount ({fromCurr})</span>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder={fromCurr === 'KWD' ? '0.000' : '0.00'}
+                        value={transferAmount}
+                        onChange={(e) => setTransferAmount(e.target.value)}
+                        autoFocus
+                        required
+                      />
+                    </label>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        background: 'rgba(234, 179, 8, 0.12)',
+                        border: '1px solid rgba(234, 179, 8, 0.3)',
+                        color: 'var(--text)',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <Icon name="transfer" />
+                        <span><strong>Cross-Currency Transfer ({fromCurr} ➔ {toCurr})</strong>: Specify debit in {fromCurr} & credit in {toCurr}.</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                        <label className="field">
+                          <span>Debit Amount ({fromCurr})</span>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder={fromCurr === 'KWD' ? '0.000' : '0.00'}
+                            value={transferAmount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTransferAmount(val);
+                              const num = Number(val);
+                              if (num > 0) {
+                                const rateToUse = liveExchangeRate || (fromCurr === 'KWD' ? 273.5 : 0.00365);
+                                setTransferDestAmount((num * rateToUse).toFixed(toCurr === 'INR' ? 2 : 3));
+                              }
+                            }}
+                            autoFocus
+                            required
+                          />
+                        </label>
+
+                        <label className="field">
+                          <span>Credit Amount ({toCurr})</span>
+                          <input
+                            type="number"
+                            step="any"
+                            placeholder={toCurr === 'INR' ? '0.00' : '0.000'}
+                            value={transferDestAmount}
+                            onChange={(e) => setTransferDestAmount(e.target.value)}
+                            required
+                          />
+                        </label>
+                      </div>
+
+                      {Number(transferAmount) > 0 && Number(transferDestAmount) > 0 && (
+                        <div style={{ fontSize: '11.5px', color: 'var(--muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--green)', fontWeight: 600 }}>
+                            {liveExchangeRate ? `⚡ Live Exchange Rate: 1 ${fromCurr} = ${liveExchangeRate} ${toCurr}` : '⚡ Live Rate Loaded'}
+                          </span>
+                          <span>
+                            Effective: 1 {fromCurr} = {(Number(transferDestAmount) / Number(transferAmount)).toFixed(4)} {toCurr}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <label className="field">
+                    <span>Notes / Purpose (Optional)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. India remittance, monthly savings"
+                      value={transferNotes}
+                      onChange={(e) => setTransferNotes(e.target.value)}
+                    />
+                  </label>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                    <button
+                      type="button"
+                      className="button button-soft"
+                      onClick={() => setShowTransferModal(false)}
+                      style={{ flex: 1 }}
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="button button-primary" style={{ flex: 1 }}>
+                      Complete Transfer
+                    </button>
+                  </div>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}

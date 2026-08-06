@@ -1,5 +1,37 @@
 import type { CurrencyCode } from './types';
 
+const exchangeRateCache: Record<string, { rate: number; timestamp: number }> = {};
+
+export async function fetchLiveExchangeRate(from: CurrencyCode, to: CurrencyCode): Promise<number> {
+  if (from === to) return 1;
+  const cacheKey = `${from}_${to}`;
+  const now = Date.now();
+
+  // Return cached rate if less than 30 minutes old
+  if (exchangeRateCache[cacheKey] && (now - exchangeRateCache[cacheKey].timestamp < 30 * 60 * 1000)) {
+    return exchangeRateCache[cacheKey].rate;
+  }
+
+  try {
+    const res = await fetch(`https://open.er-api.com/v6/latest/${from}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.rates && data.rates[to]) {
+        const rate = Number(data.rates[to]);
+        exchangeRateCache[cacheKey] = { rate, timestamp: now };
+        return rate;
+      }
+    }
+  } catch (e) {
+    console.warn('Dynamic exchange rate fetch fallback:', e);
+  }
+
+  // Fallback exchange rate ratios if network unavailable
+  if (from === 'KWD' && to === 'INR') return 273.5;
+  if (from === 'INR' && to === 'KWD') return 0.00365;
+  return 1;
+}
+
 export const currencyMeta = {
   KWD: { label: "KWD", decimals: 3, step: "0.001", placeholder: "0.000" },
   INR: { label: "INR", decimals: 2, step: "0.01", placeholder: "0.00" }
