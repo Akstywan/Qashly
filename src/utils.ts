@@ -63,25 +63,16 @@ export const incomeCategories = [
   "Other"
 ];
 
-export const kwdPaymentModes = [
-  "KNET / Debit Card",
-  "Credit Card",
-  "Cash",
-  "Bank Transfer"
-];
-
-export const inrPaymentModes = [
-  "UPI",
-  "Net Banking",
-  "Debit Card",
-  "Credit Card",
-  "Cash"
-];
-
 export function getPaymentModesForCurrency(currency: CurrencyCode, customAccounts: { name: string; currency?: CurrencyCode }[] = []): string[] {
-  const baseModes = currency === 'INR' ? inrPaymentModes : kwdPaymentModes;
-  const customNames = (customAccounts || []).map(a => a.name);
-  return Array.from(new Set([...customNames, ...baseModes]));
+  const defaultModes = currency === 'INR'
+    ? ['UPI', 'Net Banking', 'Debit Card', 'Credit Card', 'Cash']
+    : ['KNET / Debit Card', 'Credit Card', 'Cash', 'Bank Transfer'];
+
+  const accModes = (customAccounts || [])
+    .filter(a => !a.currency || a.currency === currency)
+    .map(a => a.name);
+
+  return Array.from(new Set([...defaultModes, ...accModes]));
 }
 
 export const categoryColors: Record<string, string> = {
@@ -192,33 +183,6 @@ export function getPreferredTheme(): 'light' | 'dark' {
 
 export function firstName(name: string): string {
   return String(name).trim().split(/\s+/)[0] || "User";
-}
-
-export interface LocalUserPreferences {
-  defaultCategory?: string;
-  defaultExpenseCategory?: string;
-  defaultIncomeCategory?: string;
-  defaultPaymentMode?: string;
-  defaultInrPaymentMode?: string;
-  defaultKwdPaymentMode?: string;
-  defaultDisplayAccount?: string;
-}
-
-export function getLocalUserPreferences(userId: string): LocalUserPreferences {
-  try {
-    const raw = localStorage.getItem(`qashly_user_preferences_${userId}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function saveLocalUserPreferences(userId: string, prefs: LocalUserPreferences): void {
-  try {
-    localStorage.setItem(`qashly_user_preferences_${userId}`, JSON.stringify(prefs));
-  } catch (e) {
-    console.error('Failed to save user preferences locally', e);
-  }
 }
 
 export function getPreviousMonthKey(monthKey: string): string {

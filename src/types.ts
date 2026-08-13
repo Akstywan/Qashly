@@ -3,6 +3,9 @@ export interface UserPreferences {
   defaultExpenseCategory?: string;
   defaultIncomeCategory?: string;
   defaultPaymentMode?: string;
+  defaultKwdPaymentMode?: string;
+  defaultInrPaymentMode?: string;
+  defaultDisplayAccount?: string;
 }
 
 export interface User {

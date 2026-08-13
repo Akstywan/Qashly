@@ -26,12 +26,16 @@ CREATE POLICY "Allow access to savings_pots" ON savings_pots FOR ALL TO anon, au
 DROP POLICY IF EXISTS "Allow access to user_sessions" ON user_sessions;
 CREATE POLICY "Allow access to user_sessions" ON user_sessions FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
--- 3. SAFELY HANDLE OPTIONAL TABLES (E.G. user_accounts)
-DO $$
-BEGIN
-  IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'user_accounts') THEN
-    EXECUTE 'ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY';
-    EXECUTE 'DROP POLICY IF EXISTS "Allow access to user_accounts" ON user_accounts';
-    EXECUTE 'CREATE POLICY "Allow access to user_accounts" ON user_accounts FOR ALL TO anon, authenticated USING (true) WITH CHECK (true)';
-  END IF;
-END $$;
+-- 3. ENSURE USER_ACCOUNTS TABLE & RLS POLICIES
+CREATE TABLE IF NOT EXISTS user_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(50) NOT NULL,
+    type VARCHAR(20) DEFAULT 'checking',
+    currency VARCHAR(3) DEFAULT 'KWD',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+ALTER TABLE user_accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow access to user_accounts" ON user_accounts;
+CREATE POLICY "Allow access to user_accounts" ON user_accounts FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);

@@ -2,13 +2,6 @@ import { supabase } from './supabase';
 import type { User, UserLedger, Transaction, SavingsPot, Account, CurrencyCode } from './types';
 import { createEmptyBudgets } from './utils';
 
-export function isLocalTestingMode(): boolean {
-  if (typeof window === 'undefined') return false;
-  const forcedLocal = localStorage.getItem('qashly_local_testing_mode') === 'true';
-  if (forcedLocal) return true;
-  return false;
-}
-
 export const dbService = {
   /**
    * Fetch all registered profiles, seeding an admin if empty
@@ -18,8 +11,9 @@ export const dbService = {
       const { data, error } = await supabase
         .from('users')
         .select('*');
+
       if (error) {
-        console.warn('Supabase getUsers read error (using local state fallback):', error);
+        console.error('Supabase getUsers read error:', error);
       }
 
       let list: User[] = (data || []).map((u: any) => ({
@@ -33,6 +27,7 @@ export const dbService = {
         createdAt: u.created_at,
         isFrozen: !!u.is_frozen,
         baseCurrency: u.base_currency || 'KWD',
+        userPreferences: u.permissions?.preferences || undefined,
         permissions: u.permissions || {
           savingsPots: true,
           budgets: true,
@@ -53,31 +48,29 @@ export const dbService = {
           createdAt: new Date().toISOString()
         };
 
-        if (!isLocalTestingMode()) {
-          await supabase.from('users').upsert({
-            id: seedAdmin.id,
-            username: seedAdmin.username,
-            name: seedAdmin.name,
-            role: seedAdmin.role,
-            password_hash: seedAdmin.passwordHash,
-            security_question: '',
-            security_answer_hash: '',
-            created_at: seedAdmin.createdAt,
-            is_frozen: false,
-            permissions: {
-              savingsPots: true,
-              budgets: true,
-              transactions: true,
-              multiAccount: true,
-            }
-          });
-        }
+        await supabase.from('users').upsert({
+          id: seedAdmin.id,
+          username: seedAdmin.username,
+          name: seedAdmin.name,
+          role: seedAdmin.role,
+          password_hash: seedAdmin.passwordHash,
+          security_question: '',
+          security_answer_hash: '',
+          created_at: seedAdmin.createdAt,
+          is_frozen: false,
+          permissions: {
+            savingsPots: true,
+            budgets: true,
+            transactions: true,
+            multiAccount: true,
+          }
+        });
         list.push(seedAdmin);
       }
 
       return list;
     } catch (e) {
-      console.warn('getUsers fallback to local admin user:', e);
+      console.error('getUsers error:', e);
       return [{
         id: '00000000-0000-0000-0000-000000000000',
         name: 'Admin',
@@ -95,10 +88,18 @@ export const dbService = {
    * Register or update a user profile
    */
   async saveUser(user: User): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: saveUser executed in local state only. DB protected.', user.name);
-      return;
-    }
+    const existingPerms = user.permissions || {
+      savingsPots: true,
+      budgets: true,
+      transactions: true,
+      multiAccount: true,
+    };
+
+    const mergedPermissions = {
+      ...existingPerms,
+      ...(user.userPreferences ? { preferences: user.userPreferences } : {})
+    };
+
     const { error } = await supabase
       .from('users')
       .upsert({
@@ -112,12 +113,7 @@ export const dbService = {
         created_at: user.createdAt,
         is_frozen: !!user.isFrozen,
         base_currency: user.baseCurrency || 'KWD',
-        permissions: user.permissions || {
-          savingsPots: true,
-          budgets: true,
-          transactions: true,
-          multiAccount: true,
-        }
+        permissions: mergedPermissions
       });
     if (error) {
       console.error('Supabase saveUser error:', error);
@@ -126,13 +122,52 @@ export const dbService = {
   },
 
   /**
+   * Save user preferences directly to Cloud DB (permissions JSONB in users table)
+   */
+  async saveUserPreferences(userId: string, preferences: any): Promise<void> {
+    const { data: uData, error: fetchErr } = await supabase
+      .from('users')
+      .select('permissions')
+      .eq('id', userId)
+      .single();
+
+    if (fetchErr) {
+      console.error('Supabase fetch user permissions error:', fetchErr);
+    }
+
+    const perms = uData?.permissions || {
+      savingsPots: true,
+      budgets: true,
+      transactions: true,
+      multiAccount: true,
+    };
+
+    const updatedPermissions = {
+      ...perms,
+      preferences
+    };
+
+    const { error } = await supabase
+      .from('users')
+      .update({ permissions: updatedPermissions })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('Supabase saveUserPreferences error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Fetch complete user ledger (transactions, budgets, savings pots, accounts)
    */
   async getUserLedger(userId: string): Promise<UserLedger> {
-    const [txRes, bRes, sRes] = await Promise.all([
+    const [txRes, bRes, sRes, accRes, uRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', userId),
       supabase.from('budgets').select('*').eq('user_id', userId),
       supabase.from('savings_pots').select('*').eq('user_id', userId),
+      supabase.from('user_accounts').select('*').eq('user_id', userId),
+      supabase.from('users').select('permissions').eq('id', userId).single(),
     ]);
 
     if (txRes.error) console.error('Supabase fetch transactions error:', txRes.error);
@@ -173,28 +208,40 @@ export const dbService = {
       reconciled: !!t.reconciled,
     }));
 
-    // Parse user custom accounts list (with local storage sync fallback)
+    // Parse user custom accounts list from user_accounts table or fallback to cloud user profile JSONB
     let accountsArr: Account[] = [];
-    try {
-      const { data: accData, error: accErr } = await supabase.from('user_accounts').select('*').eq('user_id', userId);
-      if (!accErr && accData && accData.length > 0) {
-        accountsArr = accData.map((a: any) => ({
-          id: a.id,
-          name: a.name,
-          type: a.type || 'checking',
-          currency: a.currency || 'KWD',
-        }));
-      } else {
-        const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
-        if (rawLoc) {
-          accountsArr = JSON.parse(rawLoc);
-        }
+    if (!accRes.error && accRes.data && accRes.data.length > 0) {
+      accountsArr = accRes.data.map((a: any) => ({
+        id: a.id,
+        name: a.name,
+        type: a.type || 'checking',
+        currency: a.currency || 'KWD',
+      }));
+    } else if (uRes.data && uRes.data.permissions && Array.isArray(uRes.data.permissions.accounts)) {
+      accountsArr = [...uRes.data.permissions.accounts];
+    }
+
+    // Auto-detect & merge any account names referenced in transactions that aren't in accountsArr yet
+    const existingNames = new Set(accountsArr.map((a) => a.name));
+    transactionsArr.forEach((t) => {
+      if (t.account && !existingNames.has(t.account)) {
+        existingNames.add(t.account);
+        accountsArr.push({
+          id: `acc-${t.account.replace(/\s+/g, '-').toLowerCase()}`,
+          name: t.account,
+          type: 'checking',
+          currency: t.currency || 'KWD'
+        });
       }
-    } catch {
-      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
-      if (rawLoc) {
-        accountsArr = JSON.parse(rawLoc);
-      }
+    });
+
+    if (accountsArr.length === 0) {
+      accountsArr = [
+        { id: 'acc-kuwait-cash', name: 'Kuwait Cash Account', type: 'checking', currency: 'KWD' },
+        { id: 'acc-salary-savings', name: 'Salary Savings', type: 'savings', currency: 'KWD' },
+        { id: 'acc-nre', name: 'NRE Account', type: 'checking', currency: 'INR' },
+        { id: 'acc-nro', name: 'NRO Account', type: 'savings', currency: 'INR' }
+      ];
     }
 
     return {
@@ -209,10 +256,6 @@ export const dbService = {
    * Save or edit a transaction record
    */
   async saveTransaction(userId: string, tx: Transaction): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: saveTransaction executed in local state only. DB protected.', tx.id);
-      return;
-    }
     const { error } = await supabase
       .from('transactions')
       .upsert({
@@ -238,10 +281,6 @@ export const dbService = {
    * Delete a transaction record
    */
   async deleteTransaction(_userId: string, txId: string): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: deleteTransaction executed in local state only. DB protected.', txId);
-      return;
-    }
     const { error } = await supabase
       .from('transactions')
       .delete()
@@ -256,10 +295,6 @@ export const dbService = {
    * Delete multiple transaction records in bulk
    */
   async deleteTransactions(_userId: string, txIds: string[]): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: deleteTransactions executed in local state only. DB protected.', txIds);
-      return;
-    }
     const { error } = await supabase
       .from('transactions')
       .delete()
@@ -274,10 +309,6 @@ export const dbService = {
    * Save or edit multiple transaction records in bulk
    */
   async saveTransactions(userId: string, txs: Transaction[]): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: saveTransactions executed in local state only. DB protected.', txs.length);
-      return;
-    }
     const rows = txs.map((tx) => ({
       id: tx.id,
       user_id: userId,
@@ -304,10 +335,6 @@ export const dbService = {
    * Set or update category budget limits
    */
   async saveBudget(userId: string, currency: CurrencyCode, category: string, amount: number): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: saveBudget executed in local state only. DB protected.', category);
-      return;
-    }
     const { error } = await supabase
       .from('budgets')
       .upsert(
@@ -329,10 +356,6 @@ export const dbService = {
    * Save or edit a savings pot details
    */
   async saveSavingsPot(userId: string, pot: SavingsPot): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: saveSavingsPot executed in local state only. DB protected.', pot.name);
-      return;
-    }
     const { error } = await supabase
       .from('savings_pots')
       .upsert({
@@ -353,10 +376,6 @@ export const dbService = {
    * Delete a savings pot
    */
   async deleteSavingsPot(_userId: string, potId: string): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: deleteSavingsPot executed in local state only. DB protected.', potId);
-      return;
-    }
     const { error } = await supabase
       .from('savings_pots')
       .delete()
@@ -371,31 +390,38 @@ export const dbService = {
    * Save or update a custom user account
    */
   async saveAccount(userId: string, account: Account): Promise<void> {
-    if (!isLocalTestingMode()) {
-      try {
-        await supabase.from('user_accounts').upsert({
-          id: account.id,
-          user_id: userId,
-          name: account.name,
-          type: account.type || 'checking',
-          currency: account.currency || 'KWD',
-        });
-      } catch (e) {
-        console.warn('Supabase saveAccount table unconfirmed, fallback to localStorage:', e);
-      }
-    }
+    // Attempt upsert into user_accounts table
     try {
-      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
-      let list: Account[] = rawLoc ? JSON.parse(rawLoc) : [];
-      const idx = list.findIndex((a) => a.id === account.id);
-      if (idx >= 0) {
-        list[idx] = account;
-      } else {
-        list.push(account);
-      }
-      localStorage.setItem(`qashly_accounts_${userId}`, JSON.stringify(list));
+      await supabase.from('user_accounts').upsert({
+        id: account.id,
+        user_id: userId,
+        name: account.name,
+        type: account.type || 'checking',
+        currency: account.currency || 'KWD',
+      });
     } catch (e) {
-      console.error('Failed to sync accounts in localStorage', e);
+      console.warn('user_accounts table not found in DB, using cloud user profile fallback:', e);
+    }
+
+    // Always update permissions.accounts JSONB in users table as cloud backup
+    try {
+      const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
+      const perms = uData?.permissions || {};
+      let accs: Account[] = Array.isArray(perms.accounts) ? [...perms.accounts] : [];
+      const idx = accs.findIndex((a) => a.id === account.id);
+      if (idx >= 0) {
+        accs[idx] = account;
+      } else {
+        accs.push(account);
+      }
+      await supabase.from('users').update({
+        permissions: {
+          ...perms,
+          accounts: accs
+        }
+      }).eq('id', userId);
+    } catch (e) {
+      console.error('Failed to sync accounts in users permissions JSONB', e);
     }
   },
 
@@ -403,22 +429,25 @@ export const dbService = {
    * Delete a custom user account
    */
   async deleteAccount(userId: string, accountId: string): Promise<void> {
-    if (!isLocalTestingMode()) {
-      try {
-        await supabase.from('user_accounts').delete().eq('id', accountId);
-      } catch (e) {
-        console.warn('Supabase deleteAccount table unconfirmed, fallback to localStorage:', e);
-      }
-    }
     try {
-      const rawLoc = localStorage.getItem(`qashly_accounts_${userId}`);
-      if (rawLoc) {
-        let list: Account[] = JSON.parse(rawLoc);
-        list = list.filter((a) => a.id !== accountId);
-        localStorage.setItem(`qashly_accounts_${userId}`, JSON.stringify(list));
+      await supabase.from('user_accounts').delete().eq('id', accountId);
+    } catch (e) {
+      console.warn('user_accounts table delete attempt:', e);
+    }
+
+    try {
+      const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
+      if (uData?.permissions && Array.isArray(uData.permissions.accounts)) {
+        const updatedAccs = uData.permissions.accounts.filter((a: Account) => a.id !== accountId);
+        await supabase.from('users').update({
+          permissions: {
+            ...uData.permissions,
+            accounts: updatedAccs
+          }
+        }).eq('id', userId);
       }
     } catch (e) {
-      console.error('Failed to delete account in localStorage', e);
+      console.error('Failed to sync account deletion in users permissions JSONB', e);
     }
   },
 
@@ -426,11 +455,6 @@ export const dbService = {
    * Reset user ledger balances (clear all)
    */
   async clearLedger(userId: string): Promise<void> {
-    if (isLocalTestingMode()) {
-      console.log('🧪 Local Testing Mode: clearLedger executed in local state only. DB protected.');
-      localStorage.removeItem(`qashly_accounts_${userId}`);
-      return;
-    }
     const [txErr, bErr, sErr] = await Promise.all([
       supabase.from('transactions').delete().eq('user_id', userId),
       supabase.from('budgets').delete().eq('user_id', userId),
@@ -440,6 +464,21 @@ export const dbService = {
     if (txErr.error) console.error('Supabase clear transactions error:', txErr.error);
     if (bErr.error) console.error('Supabase clear budgets error:', bErr.error);
     if (sErr.error) console.error('Supabase clear savings pots error:', sErr.error);
-    localStorage.removeItem(`qashly_accounts_${userId}`);
+
+    // Clear cloud backup accounts in users JSONB
+    try {
+      const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
+      if (uData?.permissions) {
+        await supabase.from('users').update({
+          permissions: {
+            ...uData.permissions,
+            accounts: []
+          }
+        }).eq('id', userId);
+      }
+    } catch (e) {
+      console.error('Failed to clear cloud backup accounts', e);
+    }
   },
 };
+

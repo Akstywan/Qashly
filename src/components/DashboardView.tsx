@@ -510,21 +510,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     }}
                   >
                     <option value="">Change Account to...</option>
-                    <optgroup label="Standard Payment Modes">
-                      <option value="KNET / Debit Card">KNET / Debit Card</option>
-                      <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
-                      <option value="Net Banking">Net Banking</option>
-                      <option value="Credit Card">Credit Card</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Bank Transfer">Bank Transfer</option>
-                    </optgroup>
-                    {accounts.length > 0 && (
-                      <optgroup label="Custom Accounts">
-                        {accounts.map(acc => (
-                          <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
-                        ))}
-                      </optgroup>
-                    )}
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
+                    ))}
                   </select>
 
                   <button

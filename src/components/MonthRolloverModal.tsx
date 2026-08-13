@@ -5,7 +5,6 @@ import {
   getPreviousMonthKey,
   calculateMonthNetBalance,
   formatMoney,
-  getPaymentModesForCurrency,
   currencyMeta
 } from '../utils';
 
@@ -43,12 +42,8 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   const [targetMonthKey, setTargetMonthKey] = useState<string>(currentMonthKey);
   const [amountInput, setAmountInput] = useState<string>('');
   const [selectedAccount, setSelectedAccount] = useState<string>(userAccounts[0]?.name || '');
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>('KNET / Debit Card');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Payment modes for selected currency
-  const paymentModes = getPaymentModesForCurrency(currency, userAccounts);
 
   // Net balance for source month
   const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency);
@@ -88,7 +83,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
         currency,
         amount: num,
         account: selectedAccount,
-        paymentMode: selectedPaymentMode,
+        paymentMode: selectedAccount,
         notes: notes.trim() || `Balance rollover from ${formatMonthLabel(sourceMonthKey)}`
       });
       onClose();
@@ -276,8 +271,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
             </label>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <label className="field">
+            <label className="field" style={{ gridColumn: 'span 2' }}>
               <span>Deposit Account</span>
               <select
                 value={selectedAccount}
@@ -297,35 +291,11 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
                 )}
                 {userAccounts.map((acc) => (
                   <option key={acc.id} value={acc.name}>
-                    {acc.name}
+                    {acc.name} ({acc.currency || 'KWD'})
                   </option>
                 ))}
               </select>
             </label>
-
-            <label className="field">
-              <span>Deposit Mode</span>
-              <select
-                value={selectedPaymentMode}
-                onChange={(e) => setSelectedPaymentMode(e.target.value)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-glass)',
-                  background: 'var(--field)',
-                  color: 'var(--text)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              >
-                {paymentModes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    {mode}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
 
           <label className="field">
             <span>Notes / Description</span>

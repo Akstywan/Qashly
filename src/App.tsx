@@ -8,16 +8,14 @@ import {
   hashPassword,
   expenseCategories,
   incomeCategories,
-  getLocalUserPreferences,
-  saveLocalUserPreferences,
   defaultEntryDate,
-  getPaymentModesForCurrency,
   getPreviousMonthKey,
   calculateMonthNetBalance,
   formatMonthLabel,
   fetchLiveExchangeRate
 } from './utils';
 import { dbService } from './dbService';
+import { supabase } from './supabase';
 import AuthScreen from './components/AuthScreen';
 import Topbar from './components/Topbar';
 import EntryPanel from './components/EntryPanel';
@@ -46,7 +44,7 @@ export const App: React.FC = () => {
   const [showUserPreferencesModal, setShowUserPreferencesModal] = useState<boolean>(false);
   const [prefDefaultExpenseCategory, setPrefDefaultExpenseCategory] = useState<string>('Groceries');
   const [prefDefaultIncomeCategory, setPrefDefaultIncomeCategory] = useState<string>('Salary');
-  const [prefDefaultKwdPaymentMode, setPrefDefaultKwdPaymentMode] = useState<string>('KNET / Debit Card');
+  const [prefDefaultKwdPaymentMode, setPrefDefaultKwdPaymentMode] = useState<string>('Cash');
   const [prefDefaultInrPaymentMode, setPrefDefaultInrPaymentMode] = useState<string>('UPI');
   const [prefDefaultDisplayAccount, setPrefDefaultDisplayAccount] = useState<string>('all');
   const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
@@ -63,7 +61,6 @@ export const App: React.FC = () => {
   const [pendingLoginUserId, setPendingLoginUserId] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [lastActivity, setLastActivity] = useState<number>(Date.now());
   const [sessionExpired, setSessionExpired] = useState<boolean>(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionMessage, setTransitionMessage] = useState('');
@@ -108,16 +105,23 @@ export const App: React.FC = () => {
     return () => { isSubscribed = false; };
   }, [showTransferModal, transferFromAccount, transferToAccount, activeUserId, userData]);
 
+  const [dismissedRollovers, setDismissedRollovers] = useState<Set<string>>(new Set());
+
   // Auto-prompt Month Rollover modal when entering a month with unhandled previous balance
   useEffect(() => {
     if (!activeUserId || !isLoaded) return;
     const activeLedger = userData[activeUserId];
     if (!activeLedger || !activeLedger.transactions) return;
 
-    const dismissedKey = `qashly_rollover_dismissed_${activeUserId}_${month}`;
-    const isDismissed = localStorage.getItem(dismissedKey) === 'true';
+    const dismissedKey = `${activeUserId}_${month}`;
+    const isDismissed = dismissedRollovers.has(dismissedKey);
 
-    if (!isDismissed) {
+    // Suppress modal if a rollover transaction already exists for the month
+    const hasExistingRollover = activeLedger.transactions.some(
+      (t) => t.date.startsWith(month) && (t.category === 'Balance Transfer' || t.merchant.toLowerCase().includes('rollover'))
+    );
+
+    if (!isDismissed && !hasExistingRollover) {
       const prevMonth = getPreviousMonthKey(month);
       const kwdBalance = calculateMonthNetBalance(activeLedger.transactions, prevMonth, 'KWD');
       const inrBalance = calculateMonthNetBalance(activeLedger.transactions, prevMonth, 'INR');
@@ -126,7 +130,7 @@ export const App: React.FC = () => {
         setShowMonthRolloverModal(true);
       }
     }
-  }, [activeUserId, month, isLoaded, userData]);
+  }, [activeUserId, month, isLoaded, userData, dismissedRollovers]);
 
   const handleConfirmMonthRollover = async (params: {
     sourceMonth: string;
@@ -165,7 +169,7 @@ export const App: React.FC = () => {
         };
       });
 
-      localStorage.setItem(`qashly_rollover_dismissed_${activeUserId}_${params.targetMonth}`, 'true');
+      setDismissedRollovers((prev) => new Set(prev).add(`${activeUserId}_${params.targetMonth}`));
 
       showCustomAlert(
         'Balance Rollover Complete',
@@ -180,26 +184,29 @@ export const App: React.FC = () => {
 
   const handleDismissMonthRollover = (targetMonth: string) => {
     if (activeUserId) {
-      localStorage.setItem(`qashly_rollover_dismissed_${activeUserId}_${targetMonth}`, 'true');
+      setDismissedRollovers((prev) => new Set(prev).add(`${activeUserId}_${targetMonth}`));
     }
   };
 
-  // Sync user local preferences
+  // Sync user preferences directly from Cloud DB
   useEffect(() => {
     if (activeUserId) {
-      const prefs = getLocalUserPreferences(activeUserId);
-      if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
-      else if (prefs.defaultCategory) setPrefDefaultExpenseCategory(prefs.defaultCategory);
-      if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
-      if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
-      else if (prefs.defaultPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultPaymentMode);
-      if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
-      if (prefs.defaultDisplayAccount) {
-        setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
-        setSelectedAccount(prefs.defaultDisplayAccount);
+      const activeU = users.find((u) => u.id === activeUserId);
+      const prefs = activeU?.userPreferences;
+      if (prefs) {
+        if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
+        else if (prefs.defaultCategory) setPrefDefaultExpenseCategory(prefs.defaultCategory);
+        if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
+        if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
+        else if (prefs.defaultPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultPaymentMode);
+        if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
+        if (prefs.defaultDisplayAccount) {
+          setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
+          setSelectedAccount(prefs.defaultDisplayAccount);
+        }
       }
     }
-  }, [activeUserId, showUserPreferencesModal]);
+  }, [activeUserId, showUserPreferencesModal, users]);
 
   const handleExecuteTransfer = async () => {
     if (!activeUserId) return;
@@ -209,8 +216,8 @@ export const App: React.FC = () => {
       return;
     }
 
-    const sourceLabel = transferFromAccount || activeLedger.accounts?.[0]?.name || 'Main Account';
-    const destLabel = transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || 'Main Account';
+    const sourceLabel = transferFromAccount || activeLedger.accounts?.[0]?.name || '';
+    const destLabel = transferToAccount || activeLedger.accounts?.[1]?.name || activeLedger.accounts?.[0]?.name || '';
     if (sourceLabel === destLabel && transferFromMode === transferToMode) {
       showCustomAlert('Transfer Error', 'Source and destination account/mode cannot be identical.', 'error');
       return;
@@ -383,39 +390,41 @@ export const App: React.FC = () => {
   useEffect(() => {
     const initLoad = async () => {
       try {
-        const STORAGE_KEY_STR = "qashly-expense-tracker-v3";
-        const raw = localStorage.getItem(STORAGE_KEY_STR);
-
-        // Fetch users from database (Supabase / localStorage fallback)
+        // Fetch users directly from Supabase Cloud Database
         const dbUsers = await dbService.getUsers();
         setUsers(dbUsers);
 
-        if (raw) {
-          const saved = JSON.parse(raw);
+        // Auto-select initial user or default user
+        if (dbUsers.length > 0) {
+          const defaultU = dbUsers.find((u) => u.username === 'akstywan') || dbUsers[0];
+          if (defaultU) {
+            setCurrentUserId(defaultU.id);
+            setActiveUserId(defaultU.id);
 
-          // Timeout check: 15 minutes (900,000 ms)
-          const TIMEOUT_MS = 15 * 60 * 1000;
-          const hasExpired = saved.lastActivity && (Date.now() - Number(saved.lastActivity) > TIMEOUT_MS);
+            // Fetch the active user's ledger data directly from Cloud DB
+            const ledger = await dbService.getUserLedger(defaultU.id);
+            setUserData({ [defaultU.id]: ledger });
 
-          if (saved.currentUserId && !hasExpired) {
-            setCurrentUserId(saved.currentUserId);
-            setActiveUserId(saved.currentUserId);
-            setLastActivity(Date.now());
+            if (defaultU.baseCurrency) {
+              setTransactionCurrency(defaultU.baseCurrency);
+              setDashboardCurrency(defaultU.baseCurrency);
+            }
 
-            // Fetch the active user's ledger data on start
-            const ledger = await dbService.getUserLedger(saved.currentUserId);
-            setUserData({ [saved.currentUserId]: ledger });
-          } else if (saved.currentUserId && hasExpired) {
-            setSessionExpired(true);
+            if (defaultU.userPreferences) {
+              const prefs = defaultU.userPreferences;
+              if (prefs.defaultDisplayAccount) {
+                setSelectedAccount(prefs.defaultDisplayAccount);
+                setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
+              }
+              if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
+              if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
+              if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
+              if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
+            }
           }
-
-          if (saved.month) setMonth(saved.month);
-          if (saved.theme) setTheme(saved.theme);
-          if (saved.transactionCurrency) setTransactionCurrency(saved.transactionCurrency);
-          if (saved.dashboardCurrency) setDashboardCurrency(saved.dashboardCurrency);
         }
       } catch (e) {
-        console.error('Failed to load state', e);
+        console.error('Failed to load state from database', e);
       }
       setIsLoaded(true);
     };
@@ -423,24 +432,48 @@ export const App: React.FC = () => {
     initLoad();
   }, []);
 
-  // Save session state configurations to localStorage whenever they change
+  // Supabase Realtime Cloud Subscriptions for live updates
   useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      const STORAGE_KEY_STR = "qashly-expense-tracker-v3";
-      const stateToSave = {
-        currentUserId,
-        month,
-        theme,
-        transactionCurrency,
-        dashboardCurrency,
-        lastActivity
-      };
-      localStorage.setItem(STORAGE_KEY_STR, JSON.stringify(stateToSave));
-    } catch (e) {
-      console.error('Failed to save state config', e);
-    }
-  }, [currentUserId, month, theme, transactionCurrency, dashboardCurrency, lastActivity, isLoaded]);
+    if (!activeUserId) return;
+
+    const channel = supabase
+      .channel('qashly-realtime-db')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        async () => {
+          if (activeUserId) {
+            const ledger = await dbService.getUserLedger(activeUserId);
+            setUserData((prev) => ({ ...prev, [activeUserId]: ledger }));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'budgets' },
+        async () => {
+          if (activeUserId) {
+            const ledger = await dbService.getUserLedger(activeUserId);
+            setUserData((prev) => ({ ...prev, [activeUserId]: ledger }));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'savings_pots' },
+        async () => {
+          if (activeUserId) {
+            const ledger = await dbService.getUserLedger(activeUserId);
+            setUserData((prev) => ({ ...prev, [activeUserId]: ledger }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeUserId]);
 
   // Apply CSS theme to HTML tag
   useEffect(() => {
@@ -456,9 +489,7 @@ export const App: React.FC = () => {
 
     const recordActivity = () => {
       const now = Date.now();
-      // Throttle state writes to once every 2 seconds
       if (now - lastUpdate > 2000) {
-        setLastActivity(now);
         lastUpdate = now;
       }
     };
@@ -600,7 +631,6 @@ export const App: React.FC = () => {
       setActiveUserId(userId);
       setEditingTransaction(null);
       setCurrentView(window.innerWidth <= 640 ? 'transactions' : 'dashboard');
-      setLastActivity(Date.now());
       setSessionExpired(false);
 
       const loggedUser = dbUsers.find((u) => u.id === userId);
@@ -1113,9 +1143,25 @@ export const App: React.FC = () => {
 
     try {
       await dbService.saveTransaction(activeUserId, finalTx);
+
+      // Check if transaction account is missing from account list
+      const userL = userData[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+      const currentAccounts = userL.accounts || [];
+      let updatedAccounts = [...currentAccounts];
+      if (finalTx.account && !currentAccounts.some((a) => a.name === finalTx.account)) {
+        const newAcc: Account = {
+          id: createId(),
+          name: finalTx.account,
+          type: 'checking',
+          currency: finalTx.currency || 'KWD'
+        };
+        updatedAccounts.push(newAcc);
+        dbService.saveAccount(activeUserId, newAcc).catch((e) => console.warn('saveAccount auto-sync:', e));
+      }
+
       setUserData((prev) => {
-        const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
-        let newTransactions = [...userL.transactions];
+        const currentL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
+        let newTransactions = [...currentL.transactions];
 
         if (txData.id) {
           newTransactions = newTransactions.map((t) => t.id === txData.id ? finalTx : t);
@@ -1126,17 +1172,21 @@ export const App: React.FC = () => {
         return {
           ...prev,
           [activeUserId]: {
-            ...userL,
+            ...currentL,
+            accounts: updatedAccounts,
             transactions: newTransactions
           }
         };
       });
 
-      // Update viewing months and currency
+      // Update viewing months, currency, and ensure selected account includes the new transaction
       const txMonth = txData.date.slice(0, 7);
       setMonth(txMonth);
       setTransactionCurrency(txData.currency);
       setDashboardCurrency(txData.currency);
+      if (selectedAccount !== 'all' && selectedAccount !== finalTx.account) {
+        setSelectedAccount('all');
+      }
       setEditingTransaction(null);
 
       // Popup notification confirmation modal when transaction is added or updated
@@ -1286,6 +1336,7 @@ export const App: React.FC = () => {
                 accounts={activeLedger.accounts || []}
                 selectedAccount={selectedAccount}
                 activeUserId={activeUserId || undefined}
+                userPreferences={activeUser?.userPreferences}
                 permissions={currentUser?.permissions}
                 onAddAccount={handleAddAccount}
               />
@@ -1789,7 +1840,7 @@ export const App: React.FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <span className="eyebrow">Local Preference Settings</span>
+                <span className="eyebrow">Cloud Preference Settings</span>
                 <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>User Preferences</h2>
               </div>
               <button
@@ -1803,7 +1854,7 @@ export const App: React.FC = () => {
             </div>
 
             <p style={{ margin: 0, fontSize: '13px', color: 'var(--muted)' }}>
-              Set your preferred default categories and payment mode for quick entry. Saved locally in your browser.
+              Set your preferred default categories, payment modes, and display filter. Saved directly to your cloud profile.
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -1921,21 +1972,9 @@ export const App: React.FC = () => {
                   }}
                 >
                   <option value="all">All Accounts (Show Everything)</option>
-                  {(activeLedger.accounts || []).length > 0 && (
-                    <optgroup label="My Custom Accounts">
-                      {(activeLedger.accounts || []).map(acc => (
-                        <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="Standard Payment Modes">
-                    <option value="KNET / Debit Card">KNET / Debit Card</option>
-                    <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
-                    <option value="Net Banking">Net Banking</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                  </optgroup>
+                  {(activeLedger.accounts || []).map(acc => (
+                    <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
+                  ))}
                 </select>
               </label>
 
@@ -1953,37 +1992,33 @@ export const App: React.FC = () => {
                   className="button button-primary"
                   onClick={async () => {
                     if (activeUserId) {
-                      saveLocalUserPreferences(activeUserId, {
+                      const updatedPrefs = {
                         defaultExpenseCategory: prefDefaultExpenseCategory,
                         defaultIncomeCategory: prefDefaultIncomeCategory,
                         defaultKwdPaymentMode: prefDefaultKwdPaymentMode,
                         defaultInrPaymentMode: prefDefaultInrPaymentMode,
                         defaultDisplayAccount: prefDefaultDisplayAccount
-                      });
+                      };
 
                       setSelectedAccount(prefDefaultDisplayAccount);
 
-                      if (currentUser) {
-                        const updatedUser = {
-                          ...currentUser,
-                          userPreferences: {
-                            defaultExpenseCategory: prefDefaultExpenseCategory,
-                            defaultIncomeCategory: prefDefaultIncomeCategory,
-                            defaultKwdPaymentMode: prefDefaultKwdPaymentMode,
-                            defaultInrPaymentMode: prefDefaultInrPaymentMode,
-                            defaultDisplayAccount: prefDefaultDisplayAccount
-                          }
-                        };
-                        try {
-                          await dbService.saveUser(updatedUser);
-                          setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-                        } catch (e) {
-                          console.warn('DB save user preferences fallback to local:', e);
-                        }
+                      try {
+                        await dbService.saveUserPreferences(activeUserId, updatedPrefs);
+                        setUsers((prev) =>
+                          prev.map((u) => (u.id === activeUserId ? { ...u, userPreferences: updatedPrefs } : u))
+                        );
+                      } catch (e) {
+                        console.error('DB save user preferences error:', e);
+                        showCustomAlert('Cloud Save Error', 'Failed to save preferences to cloud database.', 'error');
+                        return;
                       }
 
                       setShowUserPreferencesModal(false);
-                      showCustomAlert('Preferences Saved', 'Your default categories, payment modes, and display account filter have been saved successfully.', 'success');
+                      showCustomAlert(
+                        'Preferences Saved to Cloud',
+                        'Your default categories, payment modes, and display account filter have been saved directly to your cloud profile in Supabase.',
+                        'success'
+                      );
                     }
                   }}
                   style={{ flex: 1 }}
@@ -2062,11 +2097,7 @@ export const App: React.FC = () => {
                         value={currentFromAccName}
                         onChange={(e) => {
                           setTransferFromAccount(e.target.value);
-                          const selectedAcc = (activeLedger.accounts || []).find(a => a.name === e.target.value);
-                          if (selectedAcc && selectedAcc.currency) {
-                            const modes = getPaymentModesForCurrency(selectedAcc.currency, []);
-                            setTransferFromMode(modes[0]);
-                          }
+                          setTransferFromMode(e.target.value);
                         }}
                       >
                         {(activeLedger.accounts || []).length === 0 && (
@@ -2080,31 +2111,13 @@ export const App: React.FC = () => {
                       </select>
                     </label>
 
-                    <label className="field">
-                      <span>From Payment Mode</span>
-                      <select
-                        value={transferFromMode}
-                        onChange={(e) => setTransferFromMode(e.target.value)}
-                      >
-                        {getPaymentModesForCurrency(fromCurr, []).map(mode => (
-                          <option key={mode} value={mode}>{mode}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                     <label className="field">
                       <span>To Account</span>
                       <select
                         value={currentToAccName}
                         onChange={(e) => {
                           setTransferToAccount(e.target.value);
-                          const selectedAcc = (activeLedger.accounts || []).find(a => a.name === e.target.value);
-                          if (selectedAcc && selectedAcc.currency) {
-                            const modes = getPaymentModesForCurrency(selectedAcc.currency, []);
-                            setTransferToMode(modes[0]);
-                          }
+                          setTransferToMode(e.target.value);
                         }}
                       >
                         {(activeLedger.accounts || []).length === 0 && (
@@ -2114,18 +2127,6 @@ export const App: React.FC = () => {
                           <option key={acc.id} value={acc.name}>
                             {acc.name} ({acc.currency || 'KWD'})
                           </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="field">
-                      <span>To Payment Mode</span>
-                      <select
-                        value={transferToMode}
-                        onChange={(e) => setTransferToMode(e.target.value)}
-                      >
-                        {getPaymentModesForCurrency(toCurr, []).map(mode => (
-                          <option key={mode} value={mode}>{mode}</option>
                         ))}
                       </select>
                     </label>

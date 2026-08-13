@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import type { Transaction, TransactionType, CurrencyCode, Account } from '../types';
+import type { Transaction, TransactionType, CurrencyCode, Account, UserPreferences } from '../types';
 import {
   currencyMeta,
   expenseCategories,
   incomeCategories,
   defaultEntryDate,
-  getLocalUserPreferences,
   getPaymentModesForCurrency
 } from '../utils';
 import Icon from './Icon';
@@ -21,6 +20,7 @@ interface EntryPanelProps {
   accounts?: Account[];
   selectedAccount?: string;
   activeUserId?: string;
+  userPreferences?: UserPreferences;
   permissions?: {
     savingsPots?: boolean;
     budgets?: boolean;
@@ -56,6 +56,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   accounts = [],
   selectedAccount,
   activeUserId,
+  userPreferences,
   onAddAccount,
 }) => {
   const [entryType, setEntryType] = useState<TransactionType>('expense');
@@ -65,11 +66,22 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   const [date, setDate] = useState(defaultEntryDate(month));
   const [category, setCategory] = useState('');
   const [account, setAccount] = useState(accounts[0]?.name || '');
-  const [paymentMode, setPaymentMode] = useState<string>('KNET / Debit Card');
+  const [paymentMode, setPaymentMode] = useState<string>(
+    userPreferences?.defaultKwdPaymentMode || 'Cash'
+  );
   const [notes, setNotes] = useState('');
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
   const [newAccCurrency, setNewAccCurrency] = useState<CurrencyCode>(transactionCurrency);
+
+  // Helper to resolve preferred payment mode for given currency
+  const getPreferredPaymentMode = (curr: CurrencyCode) => {
+    const prefs = userPreferences || {};
+    if (curr === 'INR') {
+      return prefs.defaultInrPaymentMode || 'UPI';
+    }
+    return prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode || 'Cash';
+  };
 
   // Auto-set default account when accounts list updates
   useEffect(() => {
@@ -110,25 +122,19 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
         if (currency !== accCurr) {
           setCurrency(accCurr);
           onTransactionCurrencyChange(accCurr);
-        }
-        const validModes = getPaymentModesForCurrency(accCurr, []);
-        if (!validModes.includes(paymentMode)) {
-          setPaymentMode(validModes[0] || (accCurr === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+          setPaymentMode(getPreferredPaymentMode(accCurr));
         }
       }
     }
-  }, [account, accounts, editingTransaction]);
+  }, [account, accounts, currency, editingTransaction, userPreferences]);
 
   // Auto-sync currency state when transactionCurrency prop changes from parent
   useEffect(() => {
     if (!editingTransaction && transactionCurrency) {
       setCurrency(transactionCurrency);
-      const validModes = getPaymentModesForCurrency(transactionCurrency, []);
-      if (!validModes.includes(paymentMode)) {
-        setPaymentMode(validModes[0] || (transactionCurrency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
-      }
+      setPaymentMode(getPreferredPaymentMode(transactionCurrency));
     }
-  }, [transactionCurrency, editingTransaction]);
+  }, [transactionCurrency, editingTransaction, userPreferences]);
 
   // Handle editing mode change
   useEffect(() => {
@@ -141,7 +147,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setDate(editingTransaction.date);
       setCategory(editingTransaction.category);
       setAccount(editingTransaction.account || accounts[0]?.name || '');
-      setPaymentMode(editingTransaction.paymentMode || (editingTransaction.currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
+      setPaymentMode(editingTransaction.paymentMode || getPreferredPaymentMode(editingTransaction.currency));
       setNotes(editingTransaction.notes || '');
     } else {
       resetForm();
@@ -161,7 +167,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   // Set default category when type changes
   useEffect(() => {
     if (!editingTransaction) {
-      const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+      const prefs = userPreferences || {};
       if (entryType === 'expense') {
         const defExp = prefs.defaultExpenseCategory || prefs.defaultCategory;
         if (defExp && expenseCategories.includes(defExp)) {
@@ -179,21 +185,13 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
         setCategory(categories[0]);
       }
     }
-  }, [entryType]);
+  }, [entryType, userPreferences]);
 
   // Keep payment mode & account updated based on user preferences and selected currency
   useEffect(() => {
     if (!editingTransaction) {
-      const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
-      
-      const currentModes = getPaymentModesForCurrency(currency, accounts);
-      const defMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
-      if (defMode && currentModes.includes(defMode)) {
-        setPaymentMode(defMode);
-      } else if (!currentModes.includes(paymentMode)) {
-        setPaymentMode(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
-      }
-
+      setPaymentMode(getPreferredPaymentMode(currency));
+      const prefs = userPreferences || {};
       const prefAcc = prefs.defaultDisplayAccount;
       if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
         setAccount(prefAcc);
@@ -201,7 +199,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
         setAccount(accounts[0].name);
       }
     }
-  }, [currency, accounts, activeUserId, editingTransaction]);
+  }, [currency, accounts, activeUserId, editingTransaction, userPreferences]);
 
   const resetForm = () => {
     setEntryType('expense');
@@ -209,7 +207,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     setMerchant('');
     setDate(defaultEntryDate(month));
 
-    const prefs = activeUserId ? getLocalUserPreferences(activeUserId) : {};
+    const prefs = userPreferences || {};
     const defExp = prefs.defaultExpenseCategory || prefs.defaultCategory;
     if (defExp && expenseCategories.includes(defExp)) {
       setCategory(defExp);
@@ -217,13 +215,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setCategory(expenseCategories[0]);
     }
 
-    const currentModes = getPaymentModesForCurrency(currency, accounts);
-    const defMode = currency === 'INR' ? prefs.defaultInrPaymentMode : (prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode);
-    if (defMode && currentModes.includes(defMode)) {
-      setPaymentMode(defMode);
-    } else {
-      setPaymentMode(currentModes[0] || (currency === 'INR' ? 'UPI' : 'KNET / Debit Card'));
-    }
+    setPaymentMode(getPreferredPaymentMode(currency));
 
     const prefAcc = prefs.defaultDisplayAccount;
     if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
@@ -460,7 +452,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
                 value={paymentMode}
                 onChange={(e) => setPaymentMode(e.target.value)}
               >
-                {getPaymentModesForCurrency(currency, []).map((mode) => (
+                {getPaymentModesForCurrency(currency, accounts).map((mode) => (
                   <option key={mode} value={mode}>
                     {mode}
                   </option>
