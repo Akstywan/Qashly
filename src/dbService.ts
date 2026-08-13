@@ -159,6 +159,36 @@ export const dbService = {
   },
 
   /**
+   * Update active single-device session token for user
+   */
+  async updateUserSessionToken(userId: string, sessionToken: string): Promise<void> {
+    try {
+      const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
+      const perms = uData?.permissions || {};
+      await supabase.from('users').update({
+        permissions: {
+          ...perms,
+          sessionToken
+        }
+      }).eq('id', userId);
+    } catch (e) {
+      console.warn('Failed to update user sessionToken in cloud DB:', e);
+    }
+  },
+
+  /**
+   * Fetch active single-device session token for user
+   */
+  async getUserSessionToken(userId: string): Promise<string | null> {
+    try {
+      const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
+      return uData?.permissions?.sessionToken || null;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  /**
    * Fetch complete user ledger (transactions, budgets, savings pots, accounts)
    */
   async getUserLedger(userId: string): Promise<UserLedger> {
@@ -426,11 +456,15 @@ export const dbService = {
   },
 
   /**
-   * Delete a custom user account
+   * Delete a custom user account and re-assign transactions using it to Cash
    */
-  async deleteAccount(userId: string, accountId: string): Promise<void> {
+  async deleteAccount(userId: string, accountId: string, accountName?: string): Promise<void> {
     try {
-      await supabase.from('user_accounts').delete().eq('id', accountId);
+      if (accountName) {
+        await supabase.from('user_accounts').delete().eq('user_id', userId).or(`id.eq.${accountId},name.eq.${accountName}`);
+      } else {
+        await supabase.from('user_accounts').delete().eq('id', accountId);
+      }
     } catch (e) {
       console.warn('user_accounts table delete attempt:', e);
     }
@@ -438,7 +472,7 @@ export const dbService = {
     try {
       const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
       if (uData?.permissions && Array.isArray(uData.permissions.accounts)) {
-        const updatedAccs = uData.permissions.accounts.filter((a: Account) => a.id !== accountId);
+        const updatedAccs = uData.permissions.accounts.filter((a: Account) => a.id !== accountId && (accountName ? a.name !== accountName : true));
         await supabase.from('users').update({
           permissions: {
             ...uData.permissions,
@@ -448,6 +482,18 @@ export const dbService = {
       }
     } catch (e) {
       console.error('Failed to sync account deletion in users permissions JSONB', e);
+    }
+
+    if (accountName) {
+      try {
+        await supabase
+          .from('transactions')
+          .update({ account_method: 'Cash' })
+          .eq('user_id', userId)
+          .eq('account_method', accountName);
+      } catch (e) {
+        console.warn('Failed to update transactions for deleted account:', e);
+      }
     }
   },
 

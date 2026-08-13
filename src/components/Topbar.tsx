@@ -16,7 +16,7 @@ interface TopbarProps {
   onViewChange: (view: 'dashboard' | 'admin' | 'report' | 'profile' | 'transactions') => void;
   onSignOut: () => void;
   onExport: () => void;
-  onClear: () => void;
+  onClear?: () => void;
   accounts?: Account[];
   selectedAccount?: string;
   onAccountChange?: (account: string) => void;
@@ -39,7 +39,6 @@ export const Topbar: React.FC<TopbarProps> = ({
   onViewChange,
   onSignOut,
   onExport,
-  onClear,
   accounts = [],
   selectedAccount = 'all',
   onAccountChange,
@@ -48,6 +47,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   onOpenTransferModal,
   onOpenMonthRolloverModal,
 }) => {
+  const [showActionsMenu, setShowActionsMenu] = React.useState(false);
   const userDisplayName = activeUser ? activeUser.name : currentUser.name;
   const isViewingOtherUser = currentUser.role === 'admin' && activeUser?.id !== currentUser.id;
   const prefix = isViewingOtherUser ? 'Viewing ' : '';
@@ -55,7 +55,20 @@ export const Topbar: React.FC<TopbarProps> = ({
   return (
     <>
       <header className="topbar">
-      <div className="brand">
+      <div 
+        className="brand"
+        onClick={() => onViewChange('dashboard')}
+        style={{ cursor: 'pointer' }}
+        title="Go to Dashboard"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onViewChange('dashboard');
+          }
+        }}
+      >
         <div className="brand-mark" aria-hidden="true" style={{ position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <img 
             src="/logo.png" 
@@ -104,38 +117,204 @@ export const Topbar: React.FC<TopbarProps> = ({
                 ))}
               </select>
             </label>
-            <button
-              type="button"
-              className="button button-soft"
-              onClick={onOpenManageAccounts}
-              title="Manage Accounts"
-              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Icon name="accounts" />
-              <span>Accounts</span>
-            </button>
-            <button
-              type="button"
-              className="button button-soft"
-              onClick={onOpenTransferModal}
-              title="Transfer Money Between Accounts"
-              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Icon name="transfer" />
-              <span>Transfer</span>
-            </button>
-            <button
-              type="button"
-              className="button button-soft"
-              onClick={onOpenMonthRolloverModal}
-              title="Rollover Month Balance to Next Month"
-              style={{ padding: '6px 10px', height: '38px', fontSize: '12px', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Icon name="arrowRightLeft" />
-              <span>Rollover</span>
-            </button>
           </div>
         )}
+
+        {/* Actions Dropdown Menu */}
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            className="button button-soft"
+            id="actionsMenuBtn"
+            onClick={() => setShowActionsMenu(!showActionsMenu)}
+            title="Account & Transaction Actions"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', height: '38px' }}
+          >
+            <Icon name="plus" />
+            <span>Actions</span>
+            <Icon name="chevron-down" style={{ fontSize: '10px', opacity: 0.7 }} />
+          </button>
+
+          {showActionsMenu && (
+            <>
+              <div 
+                style={{ position: 'fixed', inset: 0, zIndex: 999 }} 
+                onClick={() => setShowActionsMenu(false)} 
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '6px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '14px',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.05)',
+                  minWidth: '170px',
+                  padding: '6px',
+                  zIndex: 1000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                  animation: 'fade-in 0.15s ease'
+                }}
+              >
+                {(currentUser?.permissions?.multiAccount ?? true) && (
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setShowActionsMenu(false);
+                      onOpenManageAccounts?.();
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '9px 12px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: 'var(--text)',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      width: '100%',
+                      transition: 'background 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <Icon name="accounts" />
+                    <span>Create Account</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    onOpenMonthRolloverModal?.();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Icon name="arrowRightLeft" />
+                  <span>Rollover</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    onOpenTransferModal?.();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Icon name="transfer" />
+                  <span>Transfer</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    onViewChange('report');
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Icon name="file-text" />
+                  <span>Report</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    onExport?.();
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    width: '100%',
+                    transition: 'background 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface-hover)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <Icon name="download" />
+                  <span>Export Excel</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
 
         <label className="month-control compact-control" htmlFor="dashboardCurrency">
           <span>Currency</span>
@@ -160,26 +339,6 @@ export const Topbar: React.FC<TopbarProps> = ({
           <span id="themeLabel">{theme === 'dark' ? 'Light' : 'Dark'}</span>
         </button>
 
-        <button
-          className={`button button-soft nav-btn-desktop ${currentView === 'dashboard' ? 'active' : ''}`}
-          id="dashboardBtn"
-          type="button"
-          onClick={() => onViewChange('dashboard')}
-        >
-          <Icon name="chart" />
-          <span>Dashboard</span>
-        </button>
-
-        <button
-          className={`button button-soft nav-btn-desktop ${currentView === 'report' ? 'active' : ''}`}
-          id="reportBtn"
-          type="button"
-          onClick={() => onViewChange('report')}
-        >
-          <Icon name="file-text" />
-          <span>Report</span>
-        </button>
-
         {currentUser.role === 'admin' && (
           <button
             className={`button button-soft nav-btn-desktop ${currentView === 'admin' ? 'active' : ''}`}
@@ -191,43 +350,6 @@ export const Topbar: React.FC<TopbarProps> = ({
             <span>Admin</span>
           </button>
         )}
-
-        {(currentView === 'dashboard' || currentView === 'report') && (
-          <>
-            <button
-              className="button button-soft"
-              id="exportBtn"
-              type="button"
-              onClick={onExport}
-              title="Export to Excel Spreadsheet"
-            >
-              <Icon name="download" />
-              <span>Export Excel</span>
-            </button>
-
-            <button
-              className="icon-button danger"
-              id="clearBtn"
-              type="button"
-              onClick={onClear}
-              aria-label="Reset data"
-              title="Reset data"
-            >
-              <Icon name="trash" />
-            </button>
-          </>
-        )}
-
-        <button
-          className="button button-soft nav-btn-desktop"
-          id="userPreferencesBtn"
-          type="button"
-          onClick={onOpenUserPreferences}
-          title="User Preferences (Default Category & Payment Mode)"
-        >
-          <Icon name="settings" />
-          <span>Preferences</span>
-        </button>
 
         <button
           className={`button button-soft nav-btn-desktop ${currentView === 'profile' ? 'active' : ''}`}

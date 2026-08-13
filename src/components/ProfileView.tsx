@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import type { User } from '../types';
-import { hashPassword } from '../utils';
+import type { User, Account, UserPreferences } from '../types';
+import { hashPassword, expenseCategories, incomeCategories } from '../utils';
+import Icon from './Icon';
 
 interface ProfileViewProps {
   currentUser: User;
+  accounts?: Account[];
   onUpdateProfile: (
     name: string,
     newPasswordHash?: string,
     securityQuestion?: string,
     securityAnswerHash?: string
   ) => Promise<void>;
+  onSavePreferences?: (updatedPrefs: UserPreferences) => Promise<void>;
+  onResetStats?: () => void;
   onCancel: () => void;
 }
 
@@ -21,7 +25,14 @@ const SECURITY_QUESTIONS = [
   "What is your favorite book or movie?"
 ];
 
-export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateProfile, onCancel }) => {
+export const ProfileView: React.FC<ProfileViewProps> = ({ 
+  currentUser, 
+  accounts = [], 
+  onUpdateProfile, 
+  onSavePreferences,
+  onResetStats,
+  onCancel 
+}) => {
   const [name, setName] = useState(currentUser.name);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -31,7 +42,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
   const [securityQuestion, setSecurityQuestion] = useState(currentUser.securityQuestion || SECURITY_QUESTIONS[0]);
   const [securityAnswer, setSecurityAnswer] = useState('');
 
-  // Reusable custom premium alert modal popup state
+  // User preferences state
+  const initialPrefs = currentUser.userPreferences || {};
+  const [prefExpenseCategory, setPrefExpenseCategory] = useState(initialPrefs.defaultExpenseCategory || expenseCategories[0]);
+  const [prefIncomeCategory, setPrefIncomeCategory] = useState(initialPrefs.defaultIncomeCategory || incomeCategories[0]);
+  const [prefKwdPaymentMode, setPrefKwdPaymentMode] = useState(initialPrefs.defaultKwdPaymentMode || 'KNET / Debit Card');
+  const [prefInrPaymentMode, setPrefInrPaymentMode] = useState(initialPrefs.defaultInrPaymentMode || 'UPI');
+  const [prefDisplayAccount, setPrefDisplayAccount] = useState(initialPrefs.defaultDisplayAccount || 'all');
+
+  // Reusable custom alert modal state
   const [alertModal, setAlertModal] = useState<{
     show: boolean;
     title: string;
@@ -58,7 +77,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
       setAlertModal({
         show: true,
         title: 'Verification Required',
-        text: 'Please enter your current password to verify and save changes.',
+        text: 'Please enter your current password to verify and save profile changes.',
         tone: 'error'
       });
       return;
@@ -100,6 +119,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
         newAnswerHash = await hashPassword(currentUser.username, securityAnswer.trim().toLowerCase());
       }
 
+      // 1. Update profile details
       await onUpdateProfile(
         name.trim(),
         newPasswordHash,
@@ -107,31 +127,33 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
         newAnswerHash
       );
 
+      // 2. Save user preferences
+      if (onSavePreferences) {
+        await onSavePreferences({
+          defaultExpenseCategory: prefExpenseCategory,
+          defaultIncomeCategory: prefIncomeCategory,
+          defaultKwdPaymentMode: prefKwdPaymentMode,
+          defaultInrPaymentMode: prefInrPaymentMode,
+          defaultDisplayAccount: prefDisplayAccount,
+        });
+      }
+
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       setSecurityAnswer('');
 
-      if (newPassword) {
-        setAlertModal({
-          show: true,
-          title: 'Password Updated!',
-          text: 'Your security password has been changed successfully.',
-          tone: 'success'
-        });
-      } else {
-        setAlertModal({
-          show: true,
-          title: 'Profile Saved',
-          text: 'Your profile settings have been updated successfully.',
-          tone: 'success'
-        });
-      }
+      setAlertModal({
+        show: true,
+        title: 'Profile & Preferences Saved',
+        text: 'Your account profile and cloud user preferences have been updated successfully.',
+        tone: 'success'
+      });
     } catch (err) {
       setAlertModal({
         show: true,
         title: 'Error Saving Settings',
-        text: 'Failed to update profile. Please check your network and try again.',
+        text: 'Failed to update profile settings. Please try again.',
         tone: 'error'
       });
     } finally {
@@ -139,7 +161,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
     }
   };
 
-  // Get user initials for premium avatar
   const initials = currentUser.name
     .split(' ')
     .map((n) => n[0])
@@ -147,9 +168,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
     .slice(0, 2)
     .toUpperCase();
 
+  const kwdAccounts = accounts.filter(a => !a.currency || a.currency === 'KWD');
+  const inrAccounts = accounts.filter(a => a.currency === 'INR');
+
   return (
     <>
-      <section className="panel" aria-label="User profile settings" style={{ maxWidth: '580px', margin: '40px auto' }}>
+      <section className="panel" aria-label="User profile and preferences settings" style={{ maxWidth: '820px', width: '100%', margin: '30px auto' }}>
         <div className="panel-heading" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{
             width: '56px',
@@ -168,110 +192,375 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
           </div>
           <div>
             <span className="eyebrow" id="profileUsername">@{currentUser.username}</span>
-            <h2>Account Profile</h2>
+            <h2>Account Profile & Preferences</h2>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '24px' }}>
-          <label className="field" htmlFor="profileNameInput">
-            <span>Full Name</span>
-            <input
-              id="profileNameInput"
-              type="text"
-              required
-              maxLength={64}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </label>
-
-          <label className="field" htmlFor="profileCurrentPassword">
-            <span>Current Password (Required to Save Changes)</span>
-            <input
-              id="profileCurrentPassword"
-              type="password"
-              required
-              placeholder="Verify current password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-          </label>
-
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '10px 0' }} />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Change Password</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Leave blank if you do not want to update password.</p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '24px' }}>
+          
+          {/* User Account Menu & Details Table */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text)' }}>Account Info & Details</h3>
+            <div className="table-wrap" style={{ borderRadius: '12px', border: '1px solid var(--border-glass)', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '70%' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border-glass)' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>Item / Attribute</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 600 }}>Username</td>
+                    <td style={{ padding: '10px 14px', color: 'var(--muted)' }}>@{currentUser.username}</td>
+                  </tr>
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 600 }}>Role</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span style={{
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        background: currentUser.role === 'admin' ? 'rgba(70, 161, 197, 0.15)' : 'var(--field)',
+                        color: currentUser.role === 'admin' ? 'var(--teal)' : 'var(--muted)'
+                      }}>
+                        {currentUser.role}
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ padding: '10px 14px', fontWeight: 600 }}>Full Name</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <input
+                        id="profileNameInput"
+                        type="text"
+                        required
+                        maxLength={64}
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        style={{
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      />
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          <div className="field-row">
-            <label className="field" htmlFor="profileNewPassword">
-              <span>New Password</span>
+          <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '4px 0' }} />
+
+          {/* User Preferences Table */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--text)' }}>User Preferences & Defaults</h3>
+              <p style={{ fontSize: '12px', color: 'var(--muted)', margin: 0 }}>Configure default categories, payment modes, and account filter for quick data entry.</p>
+            </div>
+
+            <div className="table-wrap" style={{ borderRadius: '12px', border: '1px solid var(--border-glass)', overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '28%' }} />
+                  <col style={{ width: '34%' }} />
+                  <col style={{ width: '38%' }} />
+                </colgroup>
+                <thead>
+                  <tr style={{ background: 'var(--table-head)', borderBottom: '1px solid var(--border-glass)' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>Setting</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>Description</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'left' }}>Default Selection</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 600 }}>Default Expense Category</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--muted)', fontSize: '12px' }}>Pre-selected when adding expense entries</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select
+                        value={prefExpenseCategory}
+                        onChange={(e) => setPrefExpenseCategory(e.target.value)}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        {expenseCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 600 }}>Default Income Category</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--muted)', fontSize: '12px' }}>Pre-selected when adding income entries</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select
+                        value={prefIncomeCategory}
+                        onChange={(e) => setPrefIncomeCategory(e.target.value)}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        {incomeCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 600 }}>Default KWD Payment Mode</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--muted)', fontSize: '12px' }}>Default payment mode for KWD transactions</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select
+                        value={prefKwdPaymentMode}
+                        onChange={(e) => setPrefKwdPaymentMode(e.target.value)}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        <option value="KNET / Debit Card">KNET / Debit Card</option>
+                        <option value="Credit Card">Credit Card</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        {kwdAccounts.map(acc => (
+                          <option key={acc.id} value={acc.name}>{acc.name} (KWD)</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+
+                  <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
+                    <td style={{ padding: '12px 14px', fontWeight: 600 }}>Default INR Payment Mode</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--muted)', fontSize: '12px' }}>Default payment mode for INR transactions</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select
+                        value={prefInrPaymentMode}
+                        onChange={(e) => setPrefInrPaymentMode(e.target.value)}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        <option value="UPI">UPI (GPay / PhonePe / Paytm)</option>
+                        <option value="Net Banking">Net Banking</option>
+                        <option value="Debit Card">Debit Card</option>
+                        <option value="Credit Card">Credit Card</option>
+                        <option value="Cash">Cash</option>
+                        {inrAccounts.map(acc => (
+                          <option key={acc.id} value={acc.name}>{acc.name} (INR)</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td style={{ padding: '12px 14px', fontWeight: 600 }}>Default Display Account</td>
+                    <td style={{ padding: '12px 14px', color: 'var(--muted)', fontSize: '12px' }}>Initial account filter selected on launch</td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <select
+                        value={prefDisplayAccount}
+                        onChange={(e) => setPrefDisplayAccount(e.target.value)}
+                        style={{
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
+                          padding: '7px 10px',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-glass)',
+                          background: 'var(--field)',
+                          color: 'var(--text)',
+                          fontSize: '13px'
+                        }}
+                      >
+                        <option value="all">All Accounts (Show Everything)</option>
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '4px 0' }} />
+
+          {/* Password Security & Questions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Security & Password Management</h3>
+              <p style={{ fontSize: '12px', color: 'var(--muted)', margin: 0 }}>Update password or recovery question. Current password is required to verify changes.</p>
+            </div>
+
+            <label className="field" htmlFor="profileCurrentPassword">
+              <span>Current Password (Required to Save Changes) *</span>
               <input
-                id="profileNewPassword"
+                id="profileCurrentPassword"
                 type="password"
-                placeholder="Enter new password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                placeholder="Enter current password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
               />
             </label>
 
-            <label className="field" htmlFor="profileConfirmPassword">
-              <span>Confirm New Password</span>
+            <div className="field-row">
+              <label className="field" htmlFor="profileNewPassword">
+                <span>New Password</span>
+                <input
+                  id="profileNewPassword"
+                  type="password"
+                  placeholder="Leave blank to keep unchanged"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </label>
+
+              <label className="field" htmlFor="profileConfirmPassword">
+                <span>Confirm New Password</span>
+                <input
+                  id="profileConfirmPassword"
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="field" htmlFor="profileSecurityQSelect">
+              <span>Security Recovery Question</span>
+              <select
+                id="profileSecurityQSelect"
+                value={securityQuestion}
+                onChange={(e) => setSecurityQuestion(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  background: 'var(--field)',
+                  border: '1px solid var(--border-glass)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+              >
+                {SECURITY_QUESTIONS.map((q) => (
+                  <option key={q} value={q}>{q}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field" htmlFor="profileSecurityAnswer">
+              <span>Security Answer</span>
               <input
-                id="profileConfirmPassword"
-                type="password"
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                id="profileSecurityAnswer"
+                type="text"
+                placeholder={currentUser.securityAnswerHash ? "•••••••• (Leave blank to keep current answer)" : "Enter recovery answer"}
+                value={securityAnswer}
+                onChange={(e) => setSecurityAnswer(e.target.value)}
               />
             </label>
           </div>
 
-          <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '10px 0' }} />
+          {onResetStats && (
+            <>
+              <hr style={{ border: 'none', borderBottom: '1px solid var(--border-glass)', margin: '4px 0' }} />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Password Recovery Settings</h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Configure security question for self-service password resets.</p>
-          </div>
-
-          <label className="field" htmlFor="profileSecurityQSelect">
-            <span>Security Recovery Question</span>
-            <select
-              id="profileSecurityQSelect"
-              value={securityQuestion}
-              onChange={(e) => setSecurityQuestion(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                background: 'var(--field)',
-                border: '1px solid var(--border-glass)',
-                borderRadius: '8px',
-                color: 'var(--text)',
-                fontSize: '14px',
-                outline: 'none'
-              }}
-            >
-              {SECURITY_QUESTIONS.map((q) => (
-                <option key={q} value={q}>{q}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field" htmlFor="profileSecurityAnswer">
-            <span>Security Answer</span>
-            <input
-              id="profileSecurityAnswer"
-              type="text"
-              placeholder={currentUser.securityAnswerHash ? "•••••••• (Leave blank to keep current answer)" : "Enter recovery answer"}
-              value={securityAnswer}
-              onChange={(e) => setSecurityAnswer(e.target.value)}
-            />
-          </label>
+              <div style={{
+                background: 'rgba(211, 66, 33, 0.08)',
+                border: '1px solid rgba(211, 66, 33, 0.25)',
+                borderRadius: '14px',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '16px',
+                marginTop: '4px'
+              }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: 'var(--red, #e55353)' }}>Reset Ledger Stats & Data</h4>
+                  <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--muted)' }}>
+                    Permanently clear all logged transactions, budgets, and savings pots for your workspace.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="button button-danger"
+                  id="resetStatsBtn"
+                  onClick={onResetStats}
+                  style={{
+                    background: '#d34221',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '8px 16px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Icon name="trash" />
+                  <span>Reset Stats</span>
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="form-actions" style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
             <button className="button button-primary" type="submit" disabled={loading} style={{ flex: 1 }}>
-              {loading ? 'Saving...' : 'Save Changes'}
+              {loading ? 'Saving Settings...' : 'Save Profile & Preferences'}
             </button>
             <button className="button button-soft" type="button" onClick={onCancel} style={{ width: '100px' }}>
               Back
@@ -311,16 +600,15 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
             alignItems: 'center',
             animation: 'scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
           }}>
-            {/* Modal Icon Badge */}
             <div style={{
               width: '64px',
               height: '64px',
               borderRadius: '50%',
               background: alertModal.tone === 'success' 
-                ? 'linear-gradient(135deg, #0a4f70, #46a1c5)' // Premium deep teal-blue to cyan
+                ? 'linear-gradient(135deg, #0a4f70, #46a1c5)' 
                 : alertModal.tone === 'error'
-                ? 'linear-gradient(135deg, #d34221, #f2894f)' // Premium terracotta red/coral orange
-                : 'linear-gradient(135deg, #118ab2, #84cce4)', // Cyan to light blue gradient
+                ? 'linear-gradient(135deg, #d34221, #f2894f)' 
+                : 'linear-gradient(135deg, #118ab2, #84cce4)', 
               color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
@@ -362,7 +650,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
               onClick={() => {
                 setAlertModal(prev => ({ ...prev, show: false }));
                 if (alertModal.tone === 'success') {
-                  onCancel(); // Navigate back to Dashboard
+                  onCancel();
                 }
               }}
               style={{
@@ -399,4 +687,5 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ currentUser, onUpdateP
     </>
   );
 };
+
 export default ProfileView;

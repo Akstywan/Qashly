@@ -22,12 +22,14 @@ const bsIconMap: Record<string, string> = {
   'file-text': 'file-earmark-text',
   settings: 'gear',
   transfer: 'arrow-left-right',
+  arrowRightLeft: 'arrow-left-right',
   accounts: 'bank',
   warning: 'exclamation-triangle-fill',
   info: 'info-circle-fill',
   success: 'check-circle-fill',
   card: 'credit-card-2-front',
-  bank: 'bank'
+  bank: 'bank',
+  'chevron-down': 'chevron-down'
 };
 
 interface IconProps {

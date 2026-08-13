@@ -1145,14 +1145,15 @@ tbody tr:hover {
   }
   
   .topbar {
-    flex-direction: row !important;
+    flex-wrap: wrap !important;
     justify-content: space-between !important;
     align-items: center !important;
-    padding: 12px 16px !important;
+    padding: 10px 12px !important;
     gap: 8px !important;
   }
 
   .topbar .brand {
+    flex-shrink: 0 !important;
     gap: 8px !important;
   }
 
@@ -1161,61 +1162,70 @@ tbody tr:hover {
   }
 
   .topbar .brand p {
-    font-size: 10px !important;
-    opacity: 0.8;
+    display: none !important;
   }
 
   .topbar .brand-mark {
-    width: 28px !important;
-    height: 28px !important;
-    font-size: 14px !important;
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
   }
   
   .topbar-actions {
+    display: flex !important;
+    align-items: center !important;
     justify-content: flex-end !important;
-    flex-wrap: nowrap !important;
-    gap: 4px !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    min-width: 0 !important;
   }
 
-  /* Hide text labels inside topbar action buttons on mobile */
-  .topbar-actions .button span:not(.icon),
   .topbar-actions .month-control > span {
     display: none !important;
   }
 
   .topbar-actions .button,
   .topbar-actions .icon-button {
-    padding: 0 !important;
-    width: 30px !important;
-    height: 30px !important;
-    min-height: 0 !important;
-    justify-content: center !important;
+    height: 32px !important;
+    min-height: 32px !important;
+    padding: 0 8px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+
+  .topbar-actions .button span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
   }
 
   .topbar-actions .month-control {
-    padding: 0 2px !important;
-    height: 30px !important;
-    gap: 0 !important;
+    padding: 0 6px !important;
+    height: 32px !important;
+    gap: 4px !important;
+    border-radius: 8px !important;
   }
 
   .topbar-actions .month-control input[type="month"] {
-    width: 90px !important;
-    padding: 0 4px !important;
-    font-size: 11px !important;
+    width: auto !important;
+    max-width: 120px !important;
+    padding: 0 2px !important;
+    font-size: 12px !important;
     border: none !important;
     background: transparent !important;
   }
   
   .topbar-actions .month-control select {
-    width: 52px !important;
+    width: auto !important;
+    max-width: 110px !important;
     padding: 0 2px !important;
-    font-size: 11px !important;
+    font-size: 12px !important;
     border: none !important;
     background: transparent !important;
-  }
-
-  .topbar .brand p {
-    display: none !important;
+    text-overflow: ellipsis !important;
   }
   
   .filters {

@@ -142,6 +142,25 @@ export const App: React.FC = () => {
     notes: string;
   }) => {
     if (!activeUserId) return;
+
+    // Calculate last day of source month for exit transaction
+    const [sYear, sMonth] = params.sourceMonth.split('-').map(Number);
+    const lastDayOfSourceMonth = new Date(sYear, sMonth, 0).getDate();
+    const sourceExitDate = `${params.sourceMonth}-${String(lastDayOfSourceMonth).padStart(2, '0')}`;
+
+    const exitTx: Transaction = {
+      id: createId(),
+      type: 'expense',
+      currency: params.currency,
+      amount: params.amount,
+      merchant: `Rollover to ${formatMonthLabel(params.targetMonth)}`,
+      date: sourceExitDate,
+      category: 'Balance Transfer',
+      account: params.account,
+      paymentMode: params.paymentMode,
+      notes: params.notes || `Balance rollover to ${formatMonthLabel(params.targetMonth)}`
+    };
+
     const rolloverDate = `${params.targetMonth}-01`;
     const rolloverTx: Transaction = {
       id: createId(),
@@ -153,18 +172,22 @@ export const App: React.FC = () => {
       category: 'Balance Transfer',
       account: params.account,
       paymentMode: params.paymentMode,
-      notes: params.notes
+      notes: params.notes || `Balance rollover from ${formatMonthLabel(params.sourceMonth)}`
     };
 
     try {
-      await dbService.saveTransaction(activeUserId, rolloverTx);
+      await Promise.all([
+        dbService.saveTransaction(activeUserId, exitTx),
+        dbService.saveTransaction(activeUserId, rolloverTx)
+      ]);
+
       setUserData((prev) => {
         const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
         return {
           ...prev,
           [activeUserId]: {
             ...userL,
-            transactions: [...userL.transactions, rolloverTx]
+            transactions: [...userL.transactions, exitTx, rolloverTx]
           }
         };
       });
@@ -181,6 +204,63 @@ export const App: React.FC = () => {
       throw err;
     }
   };
+
+  // Auto-reconcile paired rollover exit entries for past single-entry rollovers
+  useEffect(() => {
+    if (!activeUserId || !isLoaded) return;
+    const userL = userData[activeUserId];
+    if (!userL || !userL.transactions) return;
+
+    const txs = userL.transactions;
+    const missingExits: Transaction[] = [];
+
+    txs.forEach((t) => {
+      if (t.type === 'income' && t.category === 'Balance Transfer' && t.merchant.startsWith('Rollover from ')) {
+        const [tYear, tMonth] = t.date.split('-').map(Number);
+        const prevMonthDate = new Date(tYear, tMonth - 2, 1);
+        const sYear = prevMonthDate.getFullYear();
+        const sMonthStr = String(prevMonthDate.getMonth() + 1).padStart(2, '0');
+        const sourceMonthKey = `${sYear}-${sMonthStr}`;
+        const lastDay = new Date(sYear, prevMonthDate.getMonth() + 1, 0).getDate();
+        const exitDate = `${sourceMonthKey}-${String(lastDay).padStart(2, '0')}`;
+
+        const hasExit = txs.some(
+          (ex) => ex.type === 'expense' && ex.date.startsWith(sourceMonthKey) && (ex.category === 'Balance Transfer' || ex.merchant.startsWith('Rollover to')) && Math.abs(ex.amount - t.amount) < 0.001
+        );
+
+        if (!hasExit) {
+          missingExits.push({
+            id: createId(),
+            type: 'expense',
+            currency: t.currency,
+            amount: t.amount,
+            merchant: `Rollover to ${formatMonthLabel(t.date.slice(0, 7))}`,
+            date: exitDate,
+            category: 'Balance Transfer',
+            account: t.account,
+            paymentMode: t.paymentMode || 'Cash',
+            notes: t.notes || `Balance rollover to ${formatMonthLabel(t.date.slice(0, 7))}`
+          });
+        }
+      }
+    });
+
+    if (missingExits.length > 0) {
+      Promise.all(missingExits.map((ex) => dbService.saveTransaction(activeUserId, ex))).then(() => {
+        setUserData((prev) => {
+          const current = prev[activeUserId];
+          if (!current) return prev;
+          return {
+            ...prev,
+            [activeUserId]: {
+              ...current,
+              transactions: [...current.transactions, ...missingExits]
+            }
+          };
+        });
+      });
+    }
+  }, [activeUserId, isLoaded]);
 
   const handleDismissMonthRollover = (targetMonth: string) => {
     if (activeUserId) {
@@ -432,7 +512,7 @@ export const App: React.FC = () => {
     initLoad();
   }, []);
 
-  // Supabase Realtime Cloud Subscriptions for live updates
+  // Supabase Realtime Cloud Subscriptions for live updates and multi-device session security
   useEffect(() => {
     if (!activeUserId) return;
 
@@ -468,38 +548,89 @@ export const App: React.FC = () => {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'users' },
+        (payload: any) => {
+          if (currentUserId && payload.new && payload.new.id === currentUserId) {
+            const localToken = localStorage.getItem(`qashly_session_${currentUserId}`);
+            const remoteToken = payload.new.permissions?.sessionToken;
+            if (localToken && remoteToken && remoteToken !== localToken) {
+              setCurrentUserId(null);
+              setActiveUserId(null);
+              setEditingTransaction(null);
+              setCurrentView('dashboard');
+              showCustomAlert(
+                'Session Terminated',
+                'Your account was signed into from another device or browser. This session has been logged out.',
+                'warning'
+              );
+            }
+          }
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeUserId]);
+  }, [activeUserId, currentUserId]);
 
   // Apply CSS theme to HTML tag
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
-  // Session Inactivity Monitoring
+  // Single-device session concurrency monitoring (5s fallback check)
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const checkSingleDeviceSession = async () => {
+      try {
+        const localToken = localStorage.getItem(`qashly_session_${currentUserId}`);
+        if (!localToken) return;
+
+        const remoteToken = await dbService.getUserSessionToken(currentUserId);
+        if (remoteToken && remoteToken !== localToken) {
+          setCurrentUserId(null);
+          setActiveUserId(null);
+          setEditingTransaction(null);
+          setCurrentView('dashboard');
+          showCustomAlert(
+            'Session Terminated',
+            'Your account was signed into from another device or browser. This session has been logged out.',
+            'warning'
+          );
+        }
+      } catch (e) {
+        console.warn('Single-device session check warning:', e);
+      }
+    };
+
+    const interval = setInterval(checkSingleDeviceSession, 5000);
+    return () => clearInterval(interval);
+  }, [currentUserId]);
+
+  // Session Inactivity Monitoring (Strict 10 Minutes Maximum)
   useEffect(() => {
     if (!currentUserId) return;
 
     let lastUpdate = Date.now();
-    const TIMEOUT_MS = 15 * 60 * 1000;
+    const TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes maximum
 
     const recordActivity = () => {
       const now = Date.now();
-      if (now - lastUpdate > 2000) {
+      if (now - lastUpdate > 1000) {
         lastUpdate = now;
       }
     };
 
-    const events = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart'];
+    const events = ['mousemove', 'mousedown', 'keypress', 'scroll', 'touchstart', 'click'];
     events.forEach((ev) => window.addEventListener(ev, recordActivity));
 
     const interval = setInterval(() => {
       const now = Date.now();
-      if (now - lastUpdate > TIMEOUT_MS) {
+      if (now - lastUpdate >= TIMEOUT_MS) {
         // Sign out due to session timeout
         setCurrentUserId(null);
         setActiveUserId(null);
@@ -507,7 +638,7 @@ export const App: React.FC = () => {
         setCurrentView('dashboard');
         setSessionExpired(true);
       }
-    }, 10000);
+    }, 5000);
 
     return () => {
       events.forEach((ev) => window.removeEventListener(ev, recordActivity));
@@ -627,6 +758,11 @@ export const App: React.FC = () => {
       const dbUsers = await dbService.getUsers();
       setUsers(dbUsers);
       
+      // Single-Device Concurrency: Register new session token
+      const deviceToken = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      localStorage.setItem(`qashly_session_${userId}`, deviceToken);
+      await dbService.updateUserSessionToken(userId, deviceToken);
+
       setCurrentUserId(userId);
       setActiveUserId(userId);
       setEditingTransaction(null);
@@ -1047,26 +1183,31 @@ export const App: React.FC = () => {
 
   const handleDeleteAccount = async (id: string) => {
     if (!activeUserId) return;
-    const account = (activeLedger.accounts || []).find((a) => a.id === id);
+    const account = (activeLedger.accounts || []).find((a) => a.id === id || a.name === id);
     if (!account) return;
 
     const confirmed = await showCustomConfirm(
       'Delete Account',
-      `Are you sure you want to delete account "${account.name}"? Transactions associated with it will remain intact.`,
+      `Are you sure you want to delete account "${account.name}"?`,
       'warning'
     );
     if (!confirmed) return;
 
     try {
-      await dbService.deleteAccount(activeUserId, id);
+      await dbService.deleteAccount(activeUserId, account.id, account.name);
+      if (selectedAccount === account.name) {
+        setSelectedAccount('all');
+      }
       setUserData((prev) => {
         const userL = prev[activeUserId] || { transactions: [], budgets: createEmptyBudgets(), savingsPots: [], accounts: [] };
         const currentAccounts = userL.accounts || [];
+        const updatedTxs = userL.transactions.map((t) => (t.account === account.name ? { ...t, account: 'Cash' } : t));
         return {
           ...prev,
           [activeUserId]: {
             ...userL,
-            accounts: currentAccounts.filter((a) => a.id !== id)
+            transactions: updatedTxs,
+            accounts: currentAccounts.filter((a) => a.id !== account.id && a.name !== account.name)
           }
         };
       });
@@ -1315,7 +1456,7 @@ export const App: React.FC = () => {
             selectedAccount={selectedAccount}
             onAccountChange={setSelectedAccount}
             onOpenManageAccounts={() => setShowManageAccountsModal(true)}
-            onOpenUserPreferences={() => setShowUserPreferencesModal(true)}
+            onOpenUserPreferences={() => setCurrentView('profile')}
             onOpenTransferModal={() => setShowTransferModal(true)}
             onOpenMonthRolloverModal={() => setShowMonthRolloverModal(true)}
           />
@@ -1374,7 +1515,18 @@ export const App: React.FC = () => {
             ) : currentView === 'profile' ? (
               <ProfileView
                 currentUser={currentUser}
+                accounts={activeLedger.accounts || []}
                 onUpdateProfile={handleUpdateProfile}
+                onSavePreferences={async (updatedPrefs) => {
+                  if (activeUserId) {
+                    setSelectedAccount(updatedPrefs.defaultDisplayAccount || 'all');
+                    await dbService.saveUserPreferences(activeUserId, updatedPrefs);
+                    setUsers((prev) =>
+                      prev.map((u) => (u.id === activeUserId ? { ...u, userPreferences: updatedPrefs } : u))
+                    );
+                  }
+                }}
+                onResetStats={handleClear}
                 onCancel={() => setCurrentView('dashboard')}
               />
             ) : (
