@@ -66,164 +66,211 @@ export const SavingsPots: React.FC<SavingsPotsProps> = ({
   return (
     <section className="panel budget-panel" aria-label="Savings Pots">
       <div className="panel-heading">
-        <div>
-          <span className="eyebrow">Savings Goal</span>
-          <h2>Savings Pots</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="metric-icon" style={{ width: '36px', height: '36px', fontSize: '16px', color: 'var(--blue)' }}>
+            <Icon name="wallet" />
+          </div>
+          <h2 style={{ fontSize: '18px', margin: 0 }}>Savings Pots</h2>
         </div>
-        <span className="panel-total">{dashboardCurrency} goals</span>
+        <span className="panel-total" style={{ color: 'var(--blue)', background: 'var(--blue-soft)' }}>
+          {dashboardCurrency} goals
+        </span>
       </div>
 
-      <div className="budget-list" style={{ marginBottom: filteredPots.length > 0 ? '24px' : '0' }}>
+      <div className="budget-list" style={{ marginBottom: filteredPots.length > 0 ? '20px' : '0' }}>
         {filteredPots.map((pot) => {
           const percent = pot.targetAmount > 0 ? Math.min((pot.currentAmount / pot.targetAmount) * 100, 100) : 0;
           const roundedPercent = Math.round(percent);
           const isCompleted = pot.currentAmount >= pot.targetAmount;
 
           return (
-            <div key={pot.id} className="budget-row" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px' }}>
-              <div className="budget-meta">
-                <div className="budget-title" style={{ fontSize: '15px' }}>
-                  <span>{pot.name}</span>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ color: isCompleted ? 'var(--green)' : 'var(--muted)' }}>
-                      {`${formatMoney(pot.currentAmount, pot.currency)} / ${formatMoney(pot.targetAmount, pot.currency)} (${roundedPercent}%)`}
-                    </span>
-                    <span style={{
-                      fontSize: '11px',
-                      fontWeight: 700,
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      background: isCompleted ? 'rgba(24, 114, 104, 0.1)' : 'rgba(102, 114, 127, 0.1)',
-                      color: isCompleted ? 'var(--green)' : 'var(--muted)'
-                    }}>
-                      {isCompleted 
-                        ? 'Goal Met!' 
-                        : `${formatMoney(pot.targetAmount - pot.currentAmount, pot.currency)} left`
-                      }
-                    </span>
+            <div key={pot.id} className="budget-card-item">
+              <div className="budget-header-row">
+                <div className="budget-cat-info">
+                  <div className="budget-cat-icon" style={{ background: isCompleted ? 'var(--green-soft)' : 'var(--blue-soft)', color: isCompleted ? 'var(--green-text)' : 'var(--blue-text)' }}>
+                    <Icon name={isCompleted ? 'check' : 'coins'} />
+                  </div>
+                  <div>
+                    <div className="budget-cat-name">{pot.name}</div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--muted)', fontWeight: 600 }}>
+                      {`${formatMoney(pot.currentAmount, pot.currency)} of ${formatMoney(pot.targetAmount, pot.currency)}`}
+                    </div>
                   </div>
                 </div>
-                <div className="progress">
-                  <span className={isCompleted ? 'over' : ''} style={{ width: `${percent}%` }}></span>
-                </div>
 
-                {/* Inline Adjustment Form */}
-                {adjustingPotId === pot.id && (
-                  <form onSubmit={(e) => handleAdjustSubmit(e, pot.id)} style={{ display: 'flex', gap: '8px', marginTop: '12px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: adjustType === 'deposit' ? 'var(--green)' : 'var(--red)', textTransform: 'capitalize' }}>
-                      {adjustType}:
-                    </span>
-                    <input
-                      className="budget-input"
-                      style={{ width: '90px', minHeight: '32px', textAlign: 'left' }}
-                      type="number"
-                      min="0"
-                      step={currencyMeta[pot.currency]?.step || '0.01'}
-                      required
-                      placeholder={currencyMeta[pot.currency]?.placeholder}
-                      value={adjustAmount}
-                      onChange={(e) => setAdjustAmount(e.target.value)}
-                      autoFocus
-                    />
-                    <button className="button button-primary" style={{ minHeight: '32px', padding: '0 10px', fontSize: '12px' }} type="submit">
-                      Apply
-                    </button>
-                    <button
-                      className="button button-soft"
-                      style={{ minHeight: '32px', padding: '0 10px', fontSize: '12px', borderColor: 'var(--border)' }}
-                      type="button"
-                      onClick={() => setAdjustingPotId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </form>
-                )}
+                <span className={`variance-pill ${isCompleted ? 'left' : ''}`} style={{
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: isCompleted ? 'var(--green-soft)' : 'var(--surface-muted)',
+                  color: isCompleted ? 'var(--green-text)' : 'var(--text-secondary)'
+                }}>
+                  {isCompleted ? 'Goal Met! 🎉' : `${roundedPercent}%`}
+                </span>
+              </div>
+
+              <div className="budget-progress-track">
+                <div
+                  className="budget-progress-fill"
+                  style={{
+                    width: `${percent}%`,
+                    background: isCompleted
+                      ? 'linear-gradient(90deg, var(--green), #14b8a6)'
+                      : 'linear-gradient(90deg, var(--blue), #38bdf8)',
+                    boxShadow: isCompleted
+                      ? '0 2px 6px rgba(20, 184, 166, 0.4)'
+                      : '0 2px 6px rgba(56, 189, 248, 0.4)'
+                  }}
+                />
               </div>
 
               {/* Adjust Balance and Delete Actions */}
-              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <button
-                  className="icon-button"
-                  style={{ width: '32px', height: '32px', borderColor: 'var(--green-soft)', color: 'var(--green)' }}
-                  type="button"
-                  onClick={() => startAdjustment(pot.id, 'deposit')}
-                  title="Add Savings"
-                >
-                  <Icon name="plus" />
-                </button>
-                <button
-                  className="icon-button"
-                  style={{ width: '32px', height: '32px', borderColor: 'var(--red-soft)', color: 'var(--red)' }}
-                  type="button"
-                  disabled={pot.currentAmount <= 0}
-                  onClick={() => startAdjustment(pot.id, 'withdraw')}
-                  title="Withdraw Savings"
-                >
-                  <span style={{ fontSize: '18px', fontWeight: 800 }}>-</span>
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button
+                    className="button button-soft"
+                    style={{ height: '32px', padding: '0 10px', fontSize: '12px', color: 'var(--green-text)' }}
+                    type="button"
+                    onClick={() => startAdjustment(pot.id, 'deposit')}
+                    title="Add Deposit to Savings Pot"
+                  >
+                    <Icon name="plus" />
+                    <span>Deposit</span>
+                  </button>
+
+                  <button
+                    className="button button-soft"
+                    style={{ height: '32px', padding: '0 10px', fontSize: '12px', color: 'var(--red-text)' }}
+                    type="button"
+                    disabled={pot.currentAmount <= 0}
+                    onClick={() => startAdjustment(pot.id, 'withdraw')}
+                    title="Withdraw from Savings Pot"
+                  >
+                    <span>- Withdraw</span>
+                  </button>
+                </div>
+
                 <button
                   className="icon-button danger"
                   style={{ width: '32px', height: '32px' }}
                   type="button"
                   onClick={() => onDeletePot(pot.id)}
-                  title="Delete Pot"
+                  title="Delete Savings Pot"
                 >
                   <Icon name="trash" />
                 </button>
               </div>
+
+              {/* Inline Adjustment Form */}
+              {adjustingPotId === pot.id && (
+                <form onSubmit={(e) => handleAdjustSubmit(e, pot.id)} style={{
+                  display: 'flex',
+                  gap: '8px',
+                  marginTop: '10px',
+                  alignItems: 'center',
+                  padding: '10px',
+                  background: 'var(--field)',
+                  borderRadius: 'var(--radius-sm)',
+                  boxShadow: 'var(--clay-inset)'
+                }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: adjustType === 'deposit' ? 'var(--green)' : 'var(--red)', textTransform: 'capitalize' }}>
+                    {adjustType}:
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step={currencyMeta[pot.currency]?.step || '0.01'}
+                    required
+                    placeholder={currencyMeta[pot.currency]?.placeholder}
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    style={{ height: '32px', fontSize: '12px', width: '100px', flex: 1 }}
+                    autoFocus
+                  />
+                  <button className="button button-primary" style={{ height: '32px', padding: '0 12px', fontSize: '12px' }} type="submit">
+                    Apply
+                  </button>
+                  <button
+                    className="button button-soft"
+                    style={{ height: '32px', padding: '0 10px', fontSize: '12px' }}
+                    type="button"
+                    onClick={() => setAdjustingPotId(null)}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* New Pot Inline Creation Card Form */}
+      {/* New Pot Creation Card Form */}
       <form onSubmit={handleAddSubmit} style={{
-        background: 'var(--row-hover)',
-        border: '1px dashed var(--border-glass)',
-        borderRadius: '12px',
-        padding: '16px',
-        marginTop: '16px'
+        background: 'var(--surface)',
+        border: '1px solid var(--border-glass)',
+        borderRadius: 'var(--radius)',
+        padding: '18px',
+        marginTop: '16px',
+        boxShadow: 'var(--clay-shadow-sm)'
       }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 700 }}>Create New Savings Pot</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 90px auto', gap: '8px', alignItems: 'end' }}>
-          <label className="field" style={{ gap: '4px' }}>
-            <span style={{ fontSize: '11px' }}>Pot Name</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <div className="budget-cat-icon" style={{ width: '30px', height: '30px', fontSize: '14px', background: 'var(--green-soft)', color: 'var(--green-text)' }}>
+            <Icon name="plus" />
+          </div>
+          <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700 }}>Create New Savings Pot</h3>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: 600 }}>Pot Name</label>
             <input
-              style={{ minHeight: '34px', padding: '6px 10px' }}
               type="text"
               maxLength={40}
               required
-              placeholder="e.g. Vacation Fund"
+              placeholder="e.g. Vacation Fund, Emergency"
               value={newPotName}
               onChange={(e) => setNewPotName(e.target.value)}
+              style={{ height: '38px', fontSize: '13px' }}
             />
-          </label>
-          <label className="field" style={{ gap: '4px' }}>
-            <span style={{ fontSize: '11px' }}>Target Goal</span>
-            <input
-              style={{ minHeight: '34px', padding: '6px 10px' }}
-              type="number"
-              min="0"
-              step={currentMeta.step}
-              required
-              placeholder={currentMeta.placeholder}
-              value={newPotTarget}
-              onChange={(e) => setNewPotTarget(e.target.value)}
-            />
-          </label>
-          <label className="field" style={{ gap: '4px' }}>
-            <span style={{ fontSize: '11px' }}>Currency</span>
-            <select
-              style={{ minHeight: '34px', padding: '6px 10px' }}
-              value={newPotCurrency}
-              onChange={(e) => setNewPotCurrency(e.target.value as CurrencyCode)}
-            >
-              <option value="KWD">KWD</option>
-              <option value="INR">INR</option>
-            </select>
-          </label>
-          <button className="button button-primary" style={{ minHeight: '34px' }} type="submit">
-            Create Pot
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '10px' }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600 }}>Target Goal</label>
+              <input
+                type="number"
+                min="0"
+                step={currentMeta.step}
+                required
+                placeholder={currentMeta.placeholder}
+                value={newPotTarget}
+                onChange={(e) => setNewPotTarget(e.target.value)}
+                style={{ height: '38px', fontSize: '13px' }}
+              />
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label style={{ fontSize: '12px', fontWeight: 600 }}>Currency</label>
+              <select
+                value={newPotCurrency}
+                onChange={(e) => setNewPotCurrency(e.target.value as CurrencyCode)}
+                style={{ height: '38px', fontSize: '13px' }}
+              >
+                <option value="KWD">KWD</option>
+                <option value="INR">INR</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            className="button button-primary"
+            type="submit"
+            style={{ width: '100%', height: '38px', marginTop: '4px', fontSize: '13px' }}
+          >
+            <Icon name="plus" />
+            <span>Create Pot</span>
           </button>
         </div>
       </form>

@@ -685,18 +685,18 @@ export const App: React.FC = () => {
   const handleCreateUser = async (newUser: User) => {
     try {
       await dbService.saveUser(newUser);
-      setUsers((prev) => [...prev, newUser]);
-      setUserData((prev) => ({
-        ...prev,
-        [newUser.id]: {
-          transactions: [],
-          budgets: createEmptyBudgets(),
-          savingsPots: []
-        }
-      }));
-    } catch (error) {
-      showCustomAlert('Database Error', 'Could not save user profile in the database.', 'error');
+    } catch (e) {
+      console.warn('saveUser background sync notice:', e);
     }
+    setUsers((prev) => [...prev.filter((u) => u.id !== newUser.id), newUser]);
+    setUserData((prev) => ({
+      ...prev,
+      [newUser.id]: {
+        transactions: [],
+        budgets: createEmptyBudgets(),
+        savingsPots: []
+      }
+    }));
   };
 
   const handleUpdateUser = async (updatedUser: User) => {
@@ -789,7 +789,7 @@ export const App: React.FC = () => {
       setCurrentUserId(userId);
       setActiveUserId(userId);
       setEditingTransaction(null);
-      setCurrentView(window.innerWidth <= 640 ? 'transactions' : 'dashboard');
+      setCurrentView('dashboard');
       setSessionExpired(false);
 
       const loggedUser = dbUsers.find((u) => u.id === userId);
@@ -1500,7 +1500,7 @@ export const App: React.FC = () => {
                 onSubmit={handleSubmitTransaction}
                 transactionCurrency={transactionCurrency}
                 onTransactionCurrencyChange={setTransactionCurrency}
-                hideOnMobile={currentView === 'dashboard'}
+                hideOnMobile={!editingTransaction}
                 accounts={activeLedger.accounts || []}
                 selectedAccount={selectedAccount}
                 activeUserId={activeUserId || undefined}

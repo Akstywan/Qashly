@@ -98,10 +98,19 @@ export const categoryColors: Record<string, string> = {
 };
 
 export function createId(): string {
-  if (globalThis.crypto?.randomUUID) {
-    return globalThis.crypto.randomUUID();
+  if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+    try {
+      return crypto.randomUUID();
+    } catch (e) {
+      // Fallback if randomUUID fails in restricted context
+    }
   }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  // Standard RFC4122 v4 UUID implementation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export function fallbackHash(value: string): string {

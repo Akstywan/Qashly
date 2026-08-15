@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import type { User, UserLedger, Transaction, SavingsPot, Account, CurrencyCode } from './types';
-import { createEmptyBudgets } from './utils';
+import { createEmptyBudgets, createId } from './utils';
 
 export const dbService = {
   /**
@@ -88,6 +88,28 @@ export const dbService = {
    * Register or update a user profile
    */
   async saveUser(user: User): Promise<void> {
+    let validUserId = user.id;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+
+    if (!isUuid) {
+      try {
+        const { data: existingUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('username', user.username)
+          .maybeSingle();
+
+        if (existingUser && existingUser.id) {
+          validUserId = existingUser.id;
+        } else {
+          validUserId = createId();
+        }
+      } catch (e) {
+        validUserId = createId();
+      }
+    }
+    user.id = validUserId;
+
     const existingPerms = user.permissions || {
       savingsPots: true,
       budgets: true,
@@ -100,24 +122,44 @@ export const dbService = {
       ...(user.userPreferences ? { preferences: user.userPreferences } : {})
     };
 
-    const { error } = await supabase
-      .from('users')
-      .upsert({
-        id: user.id,
+    try {
+      const payload: any = {
+        id: validUserId,
         username: user.username,
         name: user.name,
         role: user.role,
         password_hash: user.passwordHash,
-        security_question: user.securityQuestion || '',
-        security_answer_hash: user.securityAnswerHash || '',
-        created_at: user.createdAt,
-        is_frozen: !!user.isFrozen,
-        base_currency: user.baseCurrency || 'KWD',
         permissions: mergedPermissions
-      });
-    if (error) {
-      console.error('Supabase saveUser error:', error);
-      throw error;
+      };
+
+      if (user.securityQuestion) payload.security_question = user.securityQuestion;
+      if (user.securityAnswerHash) payload.security_answer_hash = user.securityAnswerHash;
+      if (user.createdAt) payload.created_at = user.createdAt;
+      if (user.isFrozen !== undefined) payload.is_frozen = !!user.isFrozen;
+      if (user.baseCurrency) payload.base_currency = user.baseCurrency;
+
+      const { error } = await supabase
+        .from('users')
+        .upsert(payload);
+
+      if (error) {
+        console.error('Supabase primary saveUser error:', error);
+        // Try fallback upsert with minimal core fields if extra columns fail
+        const { error: fallbackErr } = await supabase
+          .from('users')
+          .upsert({
+            id: validUserId,
+            username: user.username,
+            name: user.name,
+            role: user.role,
+            password_hash: user.passwordHash
+          });
+        if (fallbackErr) {
+          console.warn('Supabase fallback saveUser warning:', fallbackErr);
+        }
+      }
+    } catch (e) {
+      console.warn('Supabase saveUser exception handling:', e);
     }
   },
 
@@ -125,36 +167,46 @@ export const dbService = {
    * Save user preferences directly to Cloud DB (permissions JSONB in users table)
    */
   async saveUserPreferences(userId: string, preferences: any): Promise<void> {
-    const { data: uData, error: fetchErr } = await supabase
-      .from('users')
-      .select('permissions')
-      .eq('id', userId)
-      .single();
-
-    if (fetchErr) {
-      console.error('Supabase fetch user permissions error:', fetchErr);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
+    let targetId = userId;
+    if (!isUuid) {
+      try {
+        const { data } = await supabase.from('users').select('id').or(`id.eq.${userId},username.eq.${userId}`).maybeSingle();
+        if (data?.id) targetId = data.id;
+      } catch (e) {
+        // Fallback
+      }
     }
 
-    const perms = uData?.permissions || {
-      savingsPots: true,
-      budgets: true,
-      transactions: true,
-      multiAccount: true,
-    };
+    try {
+      const { data: uData } = await supabase
+        .from('users')
+        .select('permissions')
+        .eq('id', targetId)
+        .maybeSingle();
 
-    const updatedPermissions = {
-      ...perms,
-      preferences
-    };
+      const perms = uData?.permissions || {
+        savingsPots: true,
+        budgets: true,
+        transactions: true,
+        multiAccount: true,
+      };
 
-    const { error } = await supabase
-      .from('users')
-      .update({ permissions: updatedPermissions })
-      .eq('id', userId);
+      const updatedPermissions = {
+        ...perms,
+        preferences
+      };
 
-    if (error) {
-      console.error('Supabase saveUserPreferences error:', error);
-      throw error;
+      const { error } = await supabase
+        .from('users')
+        .update({ permissions: updatedPermissions })
+        .eq('id', targetId);
+
+      if (error) {
+        console.warn('Supabase saveUserPreferences error:', error);
+      }
+    } catch (e) {
+      console.warn('Supabase saveUserPreferences exception:', e);
     }
   },
 
@@ -249,29 +301,6 @@ export const dbService = {
       }));
     } else if (uRes.data && uRes.data.permissions && Array.isArray(uRes.data.permissions.accounts)) {
       accountsArr = [...uRes.data.permissions.accounts];
-    }
-
-    // Auto-detect & merge any account names referenced in transactions that aren't in accountsArr yet
-    const existingNames = new Set(accountsArr.map((a) => a.name));
-    transactionsArr.forEach((t) => {
-      if (t.account && !existingNames.has(t.account)) {
-        existingNames.add(t.account);
-        accountsArr.push({
-          id: `acc-${t.account.replace(/\s+/g, '-').toLowerCase()}`,
-          name: t.account,
-          type: 'checking',
-          currency: t.currency || 'KWD'
-        });
-      }
-    });
-
-    if (accountsArr.length === 0) {
-      accountsArr = [
-        { id: 'acc-kuwait-cash', name: 'Kuwait Cash Account', type: 'checking', currency: 'KWD' },
-        { id: 'acc-salary-savings', name: 'Salary Savings', type: 'savings', currency: 'KWD' },
-        { id: 'acc-nre', name: 'NRE Account', type: 'checking', currency: 'INR' },
-        { id: 'acc-nro', name: 'NRO Account', type: 'savings', currency: 'INR' }
-      ];
     }
 
     return {
@@ -420,10 +449,14 @@ export const dbService = {
    * Save or update a custom user account
    */
   async saveAccount(userId: string, account: Account): Promise<void> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(account.id);
+    const validAccountId = isUuid ? account.id : createId();
+    account.id = validAccountId;
+
     // Attempt upsert into user_accounts table
     try {
       await supabase.from('user_accounts').upsert({
-        id: account.id,
+        id: validAccountId,
         user_id: userId,
         name: account.name,
         type: account.type || 'checking',
@@ -438,7 +471,7 @@ export const dbService = {
       const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
       const perms = uData?.permissions || {};
       let accs: Account[] = Array.isArray(perms.accounts) ? [...perms.accounts] : [];
-      const idx = accs.findIndex((a) => a.id === account.id);
+      const idx = accs.findIndex((a) => a.id === account.id || a.name === account.name);
       if (idx >= 0) {
         accs[idx] = account;
       } else {
@@ -459,11 +492,30 @@ export const dbService = {
    * Delete a custom user account and re-assign transactions using it to Cash
    */
   async deleteAccount(userId: string, accountId: string, accountName?: string): Promise<void> {
+    let nameToDelete = accountName;
+
+    // Fetch account name if not provided directly
+    if (!nameToDelete) {
+      try {
+        const { data: accData } = await supabase
+          .from('user_accounts')
+          .select('name')
+          .eq('user_id', userId)
+          .eq('id', accountId)
+          .single();
+        nameToDelete = accData?.name;
+      } catch (e) {
+        // Fallback
+      }
+    }
+
     try {
-      if (accountName) {
-        await supabase.from('user_accounts').delete().eq('user_id', userId).or(`id.eq.${accountId},name.eq.${accountName}`);
-      } else {
-        await supabase.from('user_accounts').delete().eq('id', accountId);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(accountId);
+      if (isUuid) {
+        await supabase.from('user_accounts').delete().eq('user_id', userId).eq('id', accountId);
+      }
+      if (nameToDelete) {
+        await supabase.from('user_accounts').delete().eq('user_id', userId).eq('name', nameToDelete);
       }
     } catch (e) {
       console.warn('user_accounts table delete attempt:', e);
@@ -472,7 +524,7 @@ export const dbService = {
     try {
       const { data: uData } = await supabase.from('users').select('permissions').eq('id', userId).single();
       if (uData?.permissions && Array.isArray(uData.permissions.accounts)) {
-        const updatedAccs = uData.permissions.accounts.filter((a: Account) => a.id !== accountId && (accountName ? a.name !== accountName : true));
+        const updatedAccs = uData.permissions.accounts.filter((a: Account) => a.id !== accountId && (nameToDelete ? a.name !== nameToDelete : true));
         await supabase.from('users').update({
           permissions: {
             ...uData.permissions,
@@ -484,13 +536,13 @@ export const dbService = {
       console.error('Failed to sync account deletion in users permissions JSONB', e);
     }
 
-    if (accountName) {
+    if (nameToDelete) {
       try {
         await supabase
           .from('transactions')
-          .update({ account_method: 'Cash' })
+          .update({ account_method: '' })
           .eq('user_id', userId)
-          .eq('account_method', accountName);
+          .eq('account_method', nameToDelete);
       } catch (e) {
         console.warn('Failed to update transactions for deleted account:', e);
       }

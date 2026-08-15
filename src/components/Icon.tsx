@@ -29,7 +29,17 @@ const bsIconMap: Record<string, string> = {
   success: 'check-circle-fill',
   card: 'credit-card-2-front',
   bank: 'bank',
-  'chevron-down': 'chevron-down'
+  'chevron-down': 'chevron-down',
+  menu: 'list',
+  rent: 'house-door',
+  groceries: 'cart3',
+  dining: 'cup-straw',
+  transport: 'car-front',
+  utilities: 'lightning-charge',
+  shopping: 'bag-check',
+  entertainment: 'controller',
+  health: 'heart-pulse',
+  travel: 'globe-americas'
 };
 
 interface IconProps {

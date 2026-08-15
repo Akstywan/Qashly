@@ -307,7 +307,6 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     <aside className={`sidebar-aside entry-sidebar ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transaction entry">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">{editingTransaction ? 'Modify' : 'New ledger record'}</span>
           <h2>{editingTransaction ? 'Edit Entry' : 'Add Entry'}</h2>
         </div>
         {editingTransaction && (

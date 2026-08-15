@@ -40,6 +40,22 @@ interface DashboardViewProps {
   showOnlyTransactionsOnMobile?: boolean;
 }
 
+const categoryIconMap: Record<string, string> = {
+  Rent: 'rent',
+  Groceries: 'groceries',
+  Dining: 'dining',
+  Transport: 'transport',
+  Utilities: 'utilities',
+  Shopping: 'shopping',
+  Entertainment: 'entertainment',
+  Health: 'health',
+  Travel: 'travel',
+  Salary: 'coins',
+  Freelance: 'wallet',
+  Investments: 'chart',
+  Other: 'tag'
+};
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   monthTransactions,
   budgets,
@@ -159,17 +175,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const allCategories = [...new Set([...expenseCategories, ...incomeCategories])];
 
-  const renderMoneyStack = (totals: { KWD: number; INR: number }) => {
-    const primaryCurr = dashboardCurrency;
-    const secondaryCurr = dashboardCurrency === 'INR' ? 'KWD' : 'INR';
-    return (
-      <>
-        <span className="money-line">{formatMoney(totals[primaryCurr], primaryCurr)}</span>
-        <span className="money-line secondary">{formatMoney(totals[secondaryCurr], secondaryCurr)}</span>
-      </>
-    );
-  };
-
   const handleBudgetInputChange = (cat: string, value: string) => {
     const numVal = Math.max(0, Number(value) || 0);
     onBudgetChange(dashboardCurrency, cat, numVal);
@@ -226,190 +231,158 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <section className="main-area" aria-label="Expense dashboard">
       <div className="dashboard-view" id="dashboardView">
         {/* Summary Metric Cards */}
-        <div className={`summary-grid ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Monthly summary">
-          <article className="metric">
-            <span>Balance</span>
-            <strong id="balanceValue">{renderMoneyStack(balanceTotals)}</strong>
-            <small id="balanceTrend">
-              {`${monthTransactions.length} ${monthTransactions.length === 1 ? 'entry' : 'entries'}`}
-            </small>
+        <div className={`metrics-grid ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Monthly summary" style={{ marginBottom: '22px' }}>
+          <article className="metric income">
+            <div className="metric-top">
+              <span className="metric-label">Balance</span>
+              <div className="metric-icon">
+                <Icon name="wallet" />
+              </div>
+            </div>
+            <div className="metric-value tabular-nums" id="balanceValue">
+              {formatMoney(balanceTotals[dashboardCurrency], dashboardCurrency)}
+            </div>
+            <div className="metric-sub">
+              <span>{formatMoney(balanceTotals[dashboardCurrency === 'INR' ? 'KWD' : 'INR'], dashboardCurrency === 'INR' ? 'KWD' : 'INR')}</span>
+              <span>• {monthTransactions.length} entries</span>
+            </div>
+            <svg className="metric-sparkline" viewBox="0 0 100 40">
+              <path d="M0,35 Q20,25 40,30 T80,10 T100,5" fill="none" stroke="var(--green)" strokeWidth="2.5" />
+            </svg>
           </article>
+
           <article className="metric">
-            <span>Total Budget</span>
-            <strong id="budgetTotalValue">{renderMoneyStack(budgetTotals)}</strong>
-            <small id="budgetAllocated">Allocated Limits</small>
+            <div className="metric-top">
+              <span className="metric-label">Total Budget</span>
+              <div className="metric-icon">
+                <Icon name="pieChart" />
+              </div>
+            </div>
+            <div className="metric-value tabular-nums" id="budgetTotalValue">
+              {formatMoney(budgetTotals[dashboardCurrency], dashboardCurrency)}
+            </div>
+            <div className="metric-sub">
+              <span>{formatMoney(budgetTotals[dashboardCurrency === 'INR' ? 'KWD' : 'INR'], dashboardCurrency === 'INR' ? 'KWD' : 'INR')}</span>
+              <span>• Allocated limits</span>
+            </div>
+            <svg className="metric-sparkline" viewBox="0 0 100 40">
+              <path d="M0,20 Q30,20 60,20 T100,20" fill="none" stroke="var(--blue)" strokeWidth="2" strokeDasharray="3 3" />
+            </svg>
           </article>
-          <article className="metric">
-            <span>Actual Spent</span>
-            <strong id="expenseValue">{renderMoneyStack(expenseTotals)}</strong>
-            <small id="expenseCount">
-              {`${expenseEntriesCount} ${expenseEntriesCount === 1 ? 'payment' : 'payments'}`}
-            </small>
+
+          <article className="metric expense">
+            <div className="metric-top">
+              <span className="metric-label">Actual Spent</span>
+              <div className="metric-icon">
+                <Icon name="arrowUpRight" />
+              </div>
+            </div>
+            <div className="metric-value tabular-nums" id="expenseValue">
+              {formatMoney(expenseTotals[dashboardCurrency], dashboardCurrency)}
+            </div>
+            <div className="metric-sub">
+              <span>{formatMoney(expenseTotals[dashboardCurrency === 'INR' ? 'KWD' : 'INR'], dashboardCurrency === 'INR' ? 'KWD' : 'INR')}</span>
+              <span>• {expenseEntriesCount} payments</span>
+            </div>
+            <svg className="metric-sparkline" viewBox="0 0 100 40">
+              <path d="M0,35 Q30,30 50,15 T100,5" fill="none" stroke="var(--red)" strokeWidth="2.5" />
+            </svg>
           </article>
-          <article className="metric">
-            <span>Budget Variance</span>
-            <strong id="budgetLeftValue">{renderMoneyStack(budgetLeftTotals)}</strong>
-            <small id="budgetStatus">{budgetStatusText}</small>
+
+          <article className="metric warning">
+            <div className="metric-top">
+              <span className="metric-label">Budget Variance</span>
+              <div className="metric-icon">
+                <Icon name="scale" />
+              </div>
+            </div>
+            <div className="metric-value tabular-nums" id="budgetLeftValue">
+              {formatMoney(budgetLeftTotals[dashboardCurrency], dashboardCurrency)}
+            </div>
+            <div className="metric-sub">
+              <span>{budgetStatusText}</span>
+            </div>
+            <svg className="metric-sparkline" viewBox="0 0 100 40">
+              <path d="M0,10 Q25,25 60,15 T100,30" fill="none" stroke="var(--amber)" strokeWidth="2.5" />
+            </svg>
           </article>
         </div>
 
-        {/* Charts & Budgets Panel */}
-        <div className="insight-grid" style={!(permissions?.budgets ?? true) ? { gridTemplateColumns: '1fr' } : undefined}>
-          <Charts
-            transactions={monthTransactions}
-            dashboardCurrency={dashboardCurrency}
-            theme={theme}
-            hideOnMobile={showOnlyTransactionsOnMobile}
-          />
+        {/* Dashboard Main Content Layout */}
+        <div className="dashboard-content-layout">
+          {/* Main Left Column (Charts + Transactions Register) */}
+          <div className="dashboard-main-col">
+            <Charts
+              transactions={monthTransactions}
+              dashboardCurrency={dashboardCurrency}
+              theme={theme}
+              hideOnMobile={showOnlyTransactionsOnMobile}
+            />
 
-          {/* Budgets Panel */}
-          {window.location && (permissions?.budgets ?? true) && (
-            <section className={`panel budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Budgets">
-            <div className="panel-heading">
-              <div>
-                <span className="eyebrow">Limits</span>
-                <h2>Budgets</h2>
+            {/* Transactions Register */}
+            <section className={`panel register-panel ${hideTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transactions">
+              <div className="panel-heading register-heading">
+                <div>
+                  <h2>Transactions</h2>
+                </div>
+                <div className="register-count" id="registerCount">
+                  {`${filteredTransactions.length} ${filteredTransactions.length === 1 ? 'item' : 'items'}`}
+                </div>
               </div>
-              <span className="panel-total" id="budgetCurrencyLabel">{dashboardCurrency} budgets</span>
-            </div>
-            <div id="budgetList" className="budget-list">
-              {expenseCategories.map((cat) => {
-                const spent = spendingMap.get(cat) || 0;
-                const limit = budgets[dashboardCurrency][cat] || 0;
-                const percent = limit > 0 ? Math.min((spent / limit) * 100, 140) : 0;
-                const ratio = limit > 0 ? spent / limit : 0;
 
-                let barClass = '';
-                if (ratio >= 1) {
-                  barClass = 'over';
-                } else if (ratio >= 0.8) {
-                  barClass = 'warning';
-                }
+              {/* Filters bar */}
+              <div className="filters">
+                <label className="search-field" htmlFor="searchInput">
+                  <Icon name="search" />
+                  <input
+                    id="searchInput"
+                    type="search"
+                    placeholder="Search transactions..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </label>
 
-                return (
-                  <div key={cat} className="budget-row">
-                    <div className="budget-meta">
-                      <div className="budget-title">
-                        <span>{cat}</span>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <span>{`${formatMoney(spent, dashboardCurrency)} / ${formatMoney(limit, dashboardCurrency)}`}</span>
-                          {limit > 0 && (
-                            <span className="variance-pill" style={{
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: ratio >= 1 ? 'rgba(196, 73, 45, 0.1)' : 'rgba(24, 114, 104, 0.1)',
-                              color: ratio >= 1 ? 'var(--red)' : 'var(--green)'
-                            }}>
-                              {ratio >= 1 
-                                ? `${formatMoney(spent - limit, dashboardCurrency)} over`
-                                : `${formatMoney(limit - spent, dashboardCurrency)} left`
-                              }
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="progress">
-                        <span className={barClass} style={{ width: `${percent}%` }}></span>
-                      </div>
-                    </div>
-                    <input
-                      className="budget-input"
-                      type="number"
-                      min="0"
-                      step={currencyMeta[dashboardCurrency]?.step || '0.01'}
-                      value={limit || ''}
-                      onChange={(e) => handleBudgetInputChange(cat, e.target.value)}
-                      placeholder="0.00"
-                      aria-label={`${cat} ${dashboardCurrency} budget`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-          )}
+                <label className="select-field" htmlFor="typeFilter">
+                  <Icon name="filter" />
+                  <select
+                    id="typeFilter"
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as any)}
+                  >
+                    <option value="all">All types</option>
+                    <option value="expense">Expenses</option>
+                    <option value="income">Income</option>
+                  </select>
+                </label>
 
-          {/* Savings Pots Panel */}
-          {(permissions?.savingsPots ?? true) && (
-            <div className={`budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`}>
-              <SavingsPots
-                savingsPots={savingsPots}
-                onAddPot={onAddSavingsPot}
-                onDeletePot={onDeleteSavingsPot}
-                onAdjustBalance={onAdjustSavingsBalance}
-                dashboardCurrency={dashboardCurrency}
-              />
-            </div>
-          )}
+                <label className="select-field" htmlFor="currencyFilter">
+                  <Icon name="coins" />
+                  <select
+                    id="currencyFilter"
+                    value={currencyFilter}
+                    onChange={(e) => setCurrencyFilter(e.target.value as any)}
+                  >
+                    <option value="all">All currencies</option>
+                    <option value="KWD">KWD</option>
+                    <option value="INR">INR</option>
+                  </select>
+                </label>
 
-          {/* Transactions Register */}
-          <section className={`panel register-panel ${hideTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transactions">
-            <div className="panel-heading register-heading">
-              <div>
-                <span className="eyebrow">Register</span>
-                <h2>Transactions</h2>
-              </div>
-              <div className="register-count" id="registerCount">
-                {`${filteredTransactions.length} ${filteredTransactions.length === 1 ? 'item' : 'items'}`}
-              </div>
-            </div>
+                <label className="select-field" htmlFor="categoryFilter">
+                  <Icon name="wallet" />
+                  <select
+                    id="categoryFilter"
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                  >
+                    <option value="all">All categories</option>
+                    {allCategories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </label>
 
-            {/* Filters bar */}
-            <div className="filters">
-              <label className="search-field" htmlFor="searchInput">
-                <Icon name="search" />
-                <input
-                  id="searchInput"
-                  type="search"
-                  placeholder="Search"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </label>
-
-              <label className="select-field" htmlFor="typeFilter">
-                <Icon name="filter" />
-                <select
-                  id="typeFilter"
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value as any)}
-                >
-                  <option value="all">All types</option>
-                  <option value="expense">Expenses</option>
-                  <option value="income">Income</option>
-                </select>
-              </label>
-
-              <label className="select-field" htmlFor="currencyFilter">
-                <Icon name="coins" />
-                <select
-                  id="currencyFilter"
-                  value={currencyFilter}
-                  onChange={(e) => setCurrencyFilter(e.target.value as any)}
-                >
-                  <option value="all">All currencies</option>
-                  <option value="KWD">KWD</option>
-                  <option value="INR">INR</option>
-                </select>
-              </label>
-
-              <label className="select-field" htmlFor="categoryFilter">
-                <Icon name="wallet" />
-                <select
-                  id="categoryFilter"
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                >
-                  <option value="all">All categories</option>
-                  {allCategories.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </label>
-
-              {(permissions?.multiAccount ?? true) && (
                 <label className="select-field" htmlFor="accountFilter">
                   <Icon name="credit-card" />
                   <select
@@ -418,231 +391,296 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     onChange={(e) => setAccountFilter(e.target.value)}
                   >
                     <option value="all">All accounts</option>
-                    <option value="KNET / Debit Card">KNET / Debit Card</option>
-                    <option value="Credit Card">Credit Card</option>
-                    <option value="Cash">Cash</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    {accounts.map(acc => (
+                    {accounts.map((acc) => (
                       <option key={acc.id} value={acc.name}>{acc.name}</option>
                     ))}
                   </select>
                 </label>
-              )}
-            </div>
-
-            {/* Bulk Actions Toolbar (Sleek checked item manager) */}
-            {selectedIds.length > 0 && (permissions?.transactions ?? true) && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-                padding: '12px 16px',
-                background: 'var(--blue-soft)',
-                border: '1px solid var(--blue)',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                fontSize: '13px',
-                color: 'var(--text)',
-                animation: 'fade-in 0.2s ease'
-              }}>
-                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Icon name="check" />
-                  <span>{`${selectedIds.length} ${selectedIds.length === 1 ? 'item' : 'items'} selected`}</span>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                  <button
-                    className="button button-soft"
-                    type="button"
-                    onClick={() => handleBulkReconcile(true)}
-                    style={{ padding: '6px 12px', fontSize: '12px' }}
-                    title="Mark selected as reconciled (bulk check)"
-                  >
-                    <Icon name="check" />
-                    <span>Reconcile</span>
-                  </button>
-
-                  <button
-                    className="button button-soft"
-                    type="button"
-                    onClick={() => handleBulkReconcile(false)}
-                    style={{ padding: '6px 12px', fontSize: '12px' }}
-                    title="Unmark selected as reconciled"
-                  >
-                    <span>Unreconcile</span>
-                  </button>
-
-                  <select
-                    value={bulkCategory}
-                    onChange={(e) => handleBulkCategoryChange(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-strong)',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontSize: '12px',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="">Move Category...</option>
-                    {expenseCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                    {incomeCategories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={bulkAccount}
-                    onChange={(e) => handleBulkAccountChange(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--border-strong)',
-                      background: 'var(--surface)',
-                      color: 'var(--text)',
-                      fontSize: '12px',
-                      outline: 'none'
-                    }}
-                  >
-                    <option value="">Change Account to...</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.name}>{acc.name} ({acc.currency || 'KWD'})</option>
-                    ))}
-                  </select>
-
-                  <button
-                    className="button button-soft danger"
-                    type="button"
-                    onClick={handleBulkDelete}
-                    style={{ padding: '6px 12px', fontSize: '12px' }}
-                  >
-                    <Icon name="trash" />
-                    <span>Delete</span>
-                  </button>
-                </div>
               </div>
-            )}
 
-            {/* Transactions Table */}
-            {filteredTransactions.length > 0 ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      {(permissions?.transactions ?? true) && (
-                        <th style={{ width: '40px', paddingLeft: '16px', paddingRight: '0' }}>
-                          <input
-                            type="checkbox"
-                            checked={isAllSelected}
-                            onChange={handleToggleSelectAll}
-                            aria-label="Select all transactions"
-                          />
-                        </th>
-                      )}
-                      <th>Date</th>
-                      <th>Details</th>
-                      <th>Category</th>
-                      <th>Account / Method</th>
-                      <th className="amount-cell">Amount</th>
-                      {(permissions?.transactions ?? true) && <th className="action-cell">Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody id="transactionBody">
-                    {filteredTransactions.map((t) => (
-                      <tr key={t.id} style={{ background: t.reconciled ? 'rgba(24, 114, 104, 0.04)' : undefined }}>
+              {/* Batch Action Toolbar */}
+              {selectedIds.length > 0 && (
+                <div className="bulk-toolbar" style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  background: 'var(--surface-muted)',
+                  borderRadius: '8px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap'
+                }}>
+                  <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text)' }}>
+                    {selectedIds.length} selected
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+                    <button
+                      type="button"
+                      className="button button-soft"
+                      onClick={() => handleBulkReconcile(true)}
+                      style={{ height: '32px', fontSize: '12px', padding: '0 10px' }}
+                    >
+                      <Icon name="check" /> Mark Reconciled
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-soft"
+                      onClick={() => handleBulkReconcile(false)}
+                      style={{ height: '32px', fontSize: '12px', padding: '0 10px' }}
+                    >
+                      Un-reconcile
+                    </button>
+                    <select
+                      value={bulkCategory}
+                      onChange={(e) => handleBulkCategoryChange(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-glass)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                        fontSize: '12px',
+                        height: '32px'
+                      }}
+                    >
+                      <option value="">Move Category...</option>
+                      {expenseCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      {incomeCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={bulkAccount}
+                      onChange={(e) => handleBulkAccountChange(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid var(--border-glass)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                        fontSize: '12px',
+                        height: '32px'
+                      }}
+                    >
+                      <option value="">Change Account...</option>
+                      {accounts.map(acc => (
+                        <option key={acc.id} value={acc.name}>{acc.name}</option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      className="button button-soft danger"
+                      onClick={handleBulkDelete}
+                      style={{ height: '32px', fontSize: '12px', padding: '0 10px' }}
+                    >
+                      <Icon name="trash" /> Delete Selected
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Transactions Table */}
+              {filteredTransactions.length > 0 ? (
+                <div className="table-wrapper">
+                  <table className="transactions-table">
+                    <thead>
+                      <tr>
                         {(permissions?.transactions ?? true) && (
-                          <td data-label="Select" style={{ paddingLeft: '16px', paddingRight: '0' }}>
+                          <th style={{ width: '40px', textAlign: 'center' }}>
                             <input
                               type="checkbox"
-                              checked={selectedIds.includes(t.id)}
-                              onChange={() => handleToggleSelectRow(t.id)}
-                              aria-label={`Select transaction ${t.merchant}`}
+                              checked={isAllSelected}
+                              onChange={handleToggleSelectAll}
+                              aria-label="Select all transactions"
                             />
-                          </td>
+                          </th>
                         )}
-                        <td data-label="Date">{formatShortDate(t.date)}</td>
-                        <td data-label="Details">
-                          <div className="merchant-cell">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <strong>{t.merchant}</strong>
-                              {t.reconciled && (
-                                <span
-                                  title="Reconciled (cleared)"
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: 'var(--green)',
-                                    background: 'var(--green-soft)',
-                                    borderRadius: '50%',
-                                    width: '16px',
-                                    height: '16px',
-                                    fontSize: '10px',
-                                    fontWeight: 'bold',
-                                    lineHeight: 1
-                                  }}
-                                >
-                                  ✓
-                                </span>
-                              )}
-                            </div>
-                            <span>{t.notes || (t.type === 'income' ? 'Income' : 'Expense')}</span>
-                          </div>
-                        </td>
-                        <td data-label="Category">
-                          <span className="category-pill">
-                            <span
-                              className="swatch"
-                              style={{ background: categoryColors[t.category] || categoryColors.Other || '#66727f' }}
-                            ></span>
-                            <span>{t.category}</span>
-                          </span>
-                        </td>
-                        <td data-label="Account">{t.account || 'KNET / Debit Card'}</td>
-                        <td data-label="Amount" className={`amount-cell ${t.type}`}>
-                          {`${t.type === 'expense' ? '-' : '+'}${formatMoney(t.amount, t.currency)}`}
-                        </td>
-                        {(permissions?.transactions ?? true) && (
-                          <td data-label="Actions" className="action-cell">
-                            <div className="row-actions">
-                              <button
-                                className="icon-button"
-                                type="button"
-                                onClick={() => onEditTransaction(t)}
-                                title="Edit transaction"
-                                aria-label="Edit transaction"
-                              >
-                                <Icon name="edit" />
-                              </button>
-                              <button
-                                className="icon-button danger"
-                                type="button"
-                                onClick={() => onDeleteTransaction(t.id)}
-                                title="Delete transaction"
-                                aria-label="Delete transaction"
-                              >
-                                <Icon name="trash" />
-                              </button>
-                            </div>
-                          </td>
-                        )}
+                        <th>Date</th>
+                        <th>Payee / Merchant</th>
+                        <th>Category</th>
+                        <th>Account</th>
+                        <th>Amount</th>
+                        {(permissions?.transactions ?? true) && <th>Actions</th>}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="empty-state" id="emptyState">
-                <strong>No transactions yet</strong>
-                <span>Add salary, bills, and payments from the entry panel.</span>
+                    </thead>
+                    <tbody>
+                      {filteredTransactions.map((t) => (
+                        <tr key={t.id} className={selectedIds.includes(t.id) ? 'selected-row' : ''}>
+                          {(permissions?.transactions ?? true) && (
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.includes(t.id)}
+                                onChange={() => handleToggleSelectRow(t.id)}
+                                aria-label={`Select transaction ${t.merchant}`}
+                              />
+                            </td>
+                          )}
+                          <td data-label="Date">{formatShortDate(t.date)}</td>
+                          <td data-label="Merchant">
+                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{t.merchant}</div>
+                            {t.notes && <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>{t.notes}</div>}
+                          </td>
+                          <td data-label="Category">
+                            <span className={`badge badge-${t.type}`}>
+                              <span
+                                className="legend-dot"
+                                style={{ background: categoryColors[t.category] || categoryColors.Other || '#66727f' }}
+                              ></span>
+                              <span>{t.category}</span>
+                            </span>
+                          </td>
+                          <td data-label="Account">{t.account || 'KNET / Debit Card'}</td>
+                          <td data-label="Amount" className={`amount-cell ${t.type}`}>
+                            {`${t.type === 'expense' ? '-' : '+'}${formatMoney(t.amount, t.currency)}`}
+                          </td>
+                          {(permissions?.transactions ?? true) && (
+                            <td data-label="Actions" className="action-cell">
+                              <div className="row-actions">
+                                <button
+                                  className="icon-button"
+                                  type="button"
+                                  onClick={() => onEditTransaction(t)}
+                                  title="Edit transaction"
+                                  aria-label="Edit transaction"
+                                >
+                                  <Icon name="edit" />
+                                </button>
+                                <button
+                                  className="icon-button danger"
+                                  type="button"
+                                  onClick={() => onDeleteTransaction(t.id)}
+                                  title="Delete transaction"
+                                  aria-label="Delete transaction"
+                                >
+                                  <Icon name="trash" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state" id="emptyState">
+                  <strong>No transactions yet</strong>
+                  <span>Add salary, bills, and payments from the entry panel.</span>
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Right Sidebar Column (Budgets + Savings Pots) */}
+          <div className="dashboard-sidebar-col">
+            {/* Budgets Panel */}
+            {(permissions?.budgets ?? true) && (
+              <section className={`panel budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Budgets">
+                <div className="panel-heading">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div className="metric-icon" style={{ width: '36px', height: '36px', fontSize: '16px' }}>
+                      <Icon name="coins" />
+                    </div>
+                    <h2 style={{ fontSize: '18px', margin: 0 }}>Budgets</h2>
+                  </div>
+                  <span className="panel-total" id="budgetCurrencyLabel">{dashboardCurrency} limits</span>
+                </div>
+                <div id="budgetList" className="budget-list">
+                  {expenseCategories.map((cat) => {
+                    const spent = spendingMap.get(cat) || 0;
+                    const limit = budgets[dashboardCurrency][cat] || 0;
+                    const percent = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+                    const ratio = limit > 0 ? spent / limit : 0;
+                    const iconName = categoryIconMap[cat] || 'tag';
+
+                    let barClass = '';
+                    if (ratio >= 1) {
+                      barClass = 'over';
+                    } else if (ratio >= 0.8) {
+                      barClass = 'warning';
+                    }
+
+                    return (
+                      <div key={cat} className="budget-card-item">
+                        <div className="budget-header-row">
+                          <div className="budget-cat-info">
+                            <div className="budget-cat-icon">
+                              <Icon name={iconName} />
+                            </div>
+                            <div>
+                              <div className="budget-cat-name">{cat}</div>
+                              <div style={{ fontSize: '11.5px', color: 'var(--muted)', fontWeight: 600 }}>
+                                {limit > 0 ? `${formatMoney(spent, dashboardCurrency)} spent` : 'No limit set'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="budget-amounts">
+                            <div>{`${formatMoney(spent, dashboardCurrency)} / ${formatMoney(limit, dashboardCurrency)}`}</div>
+                            {limit > 0 && (
+                              <span className={`variance-pill ${ratio >= 1 ? 'over' : 'left'}`} style={{
+                                display: 'inline-block',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                marginTop: '2px',
+                                background: ratio >= 1 ? 'var(--red-soft)' : 'var(--green-soft)',
+                                color: ratio >= 1 ? 'var(--red-text)' : 'var(--green-text)'
+                              }}>
+                                {ratio >= 1 
+                                  ? `${formatMoney(spent - limit, dashboardCurrency)} over`
+                                  : `${formatMoney(limit - spent, dashboardCurrency)} left`
+                                }
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {limit > 0 && (
+                          <div className="budget-progress-track">
+                            <div className={`budget-progress-fill ${barClass}`} style={{ width: `${percent}%` }} />
+                          </div>
+                        )}
+
+                        <div className="budget-limit-control">
+                          <span className="budget-limit-label">Limit ({dashboardCurrency})</span>
+                          <input
+                            className="budget-input-field"
+                            type="number"
+                            min="0"
+                            step={currencyMeta[dashboardCurrency]?.step || '0.01'}
+                            value={limit || ''}
+                            onChange={(e) => handleBudgetInputChange(cat, e.target.value)}
+                            placeholder="0.00"
+                            aria-label={`${cat} ${dashboardCurrency} budget`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* Savings Pots Panel */}
+            {(permissions?.savingsPots ?? true) && (
+              <div className={`budget-panel ${showOnlyTransactionsOnMobile ? 'hidden-mobile' : ''}`}>
+                <SavingsPots
+                  savingsPots={savingsPots}
+                  onAddPot={onAddSavingsPot}
+                  onDeletePot={onDeleteSavingsPot}
+                  onAdjustBalance={onAdjustSavingsBalance}
+                  dashboardCurrency={dashboardCurrency}
+                />
               </div>
             )}
-          </section>
+          </div>
         </div>
       </div>
     </section>

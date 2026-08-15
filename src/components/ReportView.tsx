@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Transaction, Budgets, CurrencyCode } from '../types';
 import { formatMoney, expenseCategories } from '../utils';
+import Icon from './Icon';
 
 interface ReportViewProps {
   monthTransactions: Transaction[];
@@ -36,7 +37,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
   let totalBudget = 0;
   let totalSpent = 0;
-  let totalBudgetedSpent = 0; // spent on categories with active budgets
 
   const rows = allCategories.map((cat) => {
     const limit = activeBudgets[cat] || 0;
@@ -46,9 +46,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
 
     totalBudget += limit;
     totalSpent += spent;
-    if (limit > 0) {
-      totalBudgetedSpent += spent;
-    }
 
     let statusText = 'No Budget';
     let statusClass = 'muted';
@@ -94,7 +91,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
       return ["You haven't set any budget limits for this month yet. Configure limits on the dashboard to enable comparison analysis."];
     }
 
-    // Overall summary statement
     if (netVariance > 0) {
       insights.push(`Great job! You spent ${formatMoney(netVariance, dashboardCurrency)} less than your overall budget this month.`);
     } else if (netVariance < 0) {
@@ -103,23 +99,19 @@ export const ReportView: React.FC<ReportViewProps> = ({
       insights.push(`Balanced month: Your total expenses exactly matched your budget limits.`);
     }
 
-    // Deficit warning
     if (overBudgetCats.length > 0) {
       const list = overBudgetCats.map((c) => `${c.category} (exceeded by ${formatMoney(Math.abs(c.difference), dashboardCurrency)})`).join(', ');
       insights.push(`Deficit Warning: You went over budget in these categories: ${list}.`);
     }
 
-    // Surplus callout
     if (savedCats.length > 0) {
-      // Find category with largest savings
       const topSavings = [...savedCats].sort((a, b) => b.difference - a.difference)[0];
       insights.push(`Top Savings: You had the largest surplus in "${topSavings.category}", saving ${formatMoney(topSavings.difference, dashboardCurrency)} of the allocated limit.`);
     }
 
-    // Unbudgeted spending warnings
     if (unbudgetedCats.length > 0) {
       const totalUnbudgeted = unbudgetedCats.reduce((sum, r) => sum + r.spent, 0);
-      insights.push(`Unbudgeted Activity: You spent a total of ${formatMoney(totalUnbudgeted, dashboardCurrency)} across categories that did not have budget caps configured (such as ${unbudgetedCats.map(c => c.category).slice(0, 3).join(', ')}).`);
+      insights.push(`Unbudgeted Activity: You spent a total of ${formatMoney(totalUnbudgeted, dashboardCurrency)} across categories that did not have budget caps configured (${unbudgetedCats.map(c => c.category).slice(0, 3).join(', ')}).`);
     }
 
     return insights;
@@ -128,78 +120,119 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const commentary = generateCommentary();
 
   return (
-    <div className="dashboard-view" style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 0' }}>
+    <div className="report-view-container" style={{ maxWidth: '1100px', margin: '0 auto', padding: '16px 0' }}>
       
-      {/* Overview Cards Grid */}
-      <div className="summary-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-        <article className="metric" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span>Total Budget Limit</span>
-          <strong style={{ fontSize: '24px' }}>{formatMoney(totalBudget, dashboardCurrency)}</strong>
-          <small>Allocated Limits</small>
-        </article>
-        
-        <article className="metric" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span>Actual Expenses</span>
-          <strong style={{ fontSize: '24px' }}>{formatMoney(totalSpent, dashboardCurrency)}</strong>
-          <small>{activeMonthExpenses.length} expense records</small>
+      {/* Responsive Overview KPI Metric Cards */}
+      <div className="report-metrics-grid" style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: '16px',
+        marginBottom: '20px'
+      }}>
+        <article className="metric">
+          <div className="metric-top">
+            <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Total Budget Limit</span>
+            <div className="metric-icon" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--blue-soft)', color: 'var(--blue-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="pie-chart" />
+            </div>
+          </div>
+          <strong className="metric-value" style={{ fontSize: '24px', fontWeight: 800, margin: '6px 0 2px', color: 'var(--text)' }}>
+            {formatMoney(totalBudget, dashboardCurrency)}
+          </strong>
+          <span className="metric-sub" style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Allocated limits</span>
         </article>
 
-        <article className="metric" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span>Variance (Difference)</span>
-          <strong style={{ 
-            fontSize: '24px', 
-            color: isOverallOver ? 'var(--red)' : 'var(--green)' 
+        <article className="metric">
+          <div className="metric-top">
+            <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Actual Expenses</span>
+            <div className="metric-icon" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--amber-soft)', color: 'var(--amber-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="wallet" />
+            </div>
+          </div>
+          <strong className="metric-value" style={{ fontSize: '24px', fontWeight: 800, margin: '6px 0 2px', color: 'var(--text)' }}>
+            {formatMoney(totalSpent, dashboardCurrency)}
+          </strong>
+          <span className="metric-sub" style={{ fontSize: '11.5px', color: 'var(--muted)' }}>{activeMonthExpenses.length} expense records</span>
+        </article>
+
+        <article className="metric">
+          <div className="metric-top">
+            <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Variance (Difference)</span>
+            <div className="metric-icon" style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: isOverallOver ? 'var(--red-soft)' : 'var(--green-soft)',
+              color: isOverallOver ? 'var(--red-text)' : 'var(--green-text)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <Icon name="trending-up" />
+            </div>
+          </div>
+          <strong className="metric-value" style={{
+            fontSize: '24px',
+            fontWeight: 800,
+            margin: '6px 0 2px',
+            color: isOverallOver ? 'var(--red-text)' : 'var(--green-text)'
           }}>
             {isOverallOver ? '-' : '+'}{formatMoney(Math.abs(netVariance), dashboardCurrency)}
           </strong>
-          <small style={{ color: isOverallOver ? 'var(--red)' : 'var(--green)', fontWeight: 700 }}>
+          <span className="metric-sub" style={{ fontSize: '11.5px', fontWeight: 700, color: isOverallOver ? 'var(--red-text)' : 'var(--green-text)' }}>
             {isOverallOver ? 'Over budget limit' : 'Surplus remaining'}
-          </small>
+          </span>
         </article>
       </div>
 
       {/* Analytical Commentary Insights */}
-      <section className="panel" style={{ padding: '20px', marginBottom: '24px' }} aria-label="Commentary Insights">
-        <h2 style={{ fontSize: '16px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', marginBottom: '12px' }}>
-          Commentary Insights
-        </h2>
+      <section className="panel" style={{ padding: '20px', marginBottom: '20px' }} aria-label="Commentary Insights">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
+          <div className="metric-icon" style={{ width: '28px', height: '28px', fontSize: '13px', background: 'var(--blue-soft)', color: 'var(--blue-text)' }}>
+            <Icon name="sparkles" />
+          </div>
+          <h2 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Commentary Insights</h2>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {commentary.map((text, idx) => (
-            <p key={idx} style={{ 
-              fontSize: '14px', 
-              lineHeight: '1.5', 
-              color: 'var(--text)', 
-              margin: 0,
-              padding: '8px 12px',
-              borderRadius: '6px',
-              background: 'var(--row-hover)',
-              borderLeft: '4px solid var(--muted)'
+            <div key={idx} style={{
+              fontSize: '13px',
+              lineHeight: '1.5',
+              color: 'var(--text)',
+              padding: '12px 14px',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--surface-muted)',
+              border: '1px solid var(--border-glass)',
+              boxShadow: 'var(--clay-inset)'
             }}>
               {text}
-            </p>
+            </div>
           ))}
         </div>
       </section>
 
       {/* Difference Analysis Table */}
-      <section className="panel" aria-label="Detailed Analysis Table">
-        <div className="panel-heading" style={{ padding: '20px 24px' }}>
-          <div>
-            <span className="eyebrow">Comparison</span>
-            <h2>Variance Analysis Table</h2>
+      <section className="panel" aria-label="Detailed Analysis Table" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="panel-heading" style={{ padding: '18px 20px', margin: 0, borderBottom: '1px solid var(--border-glass)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="metric-icon" style={{ width: '32px', height: '32px', fontSize: '14px', background: 'var(--green-soft)', color: 'var(--green-text)' }}>
+              <Icon name="chart" />
+            </div>
+            <h2 style={{ fontSize: '16px', margin: 0 }}>Variance Analysis Table</h2>
           </div>
           <span className="panel-total">{dashboardCurrency} analysis</span>
         </div>
 
-        <div className="table-wrap">
-          <table className="register-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+        <div className="table-wrap" style={{ overflowX: 'auto', width: '100%' }}>
+          <table className="register-table" style={{ width: '100%', borderCollapse: 'collapse', minWidth: '550px' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-glass)' }}>
-                <th style={{ padding: '16px 24px' }}>Category</th>
-                <th style={{ padding: '16px 24px', textAlign: 'right' }}>Budget Limit</th>
-                <th style={{ padding: '16px 24px', textAlign: 'right' }}>Actual Spent</th>
-                <th style={{ padding: '16px 24px', textAlign: 'right' }}>Difference (Variance)</th>
-                <th style={{ padding: '16px 24px', textAlign: 'center' }}>Status</th>
+              <tr style={{ background: 'var(--surface-muted)', borderBottom: '1px solid var(--border-glass)' }}>
+                <th style={{ padding: '12px 18px', textAlign: 'left', fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>Category</th>
+                <th style={{ padding: '12px 18px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>Budget Limit</th>
+                <th style={{ padding: '12px 18px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>Actual Spent</th>
+                <th style={{ padding: '12px 18px', textAlign: 'right', fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>Variance</th>
+                <th style={{ padding: '12px 18px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: 'var(--muted)' }}>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -208,41 +241,42 @@ export const ReportView: React.FC<ReportViewProps> = ({
                 
                 return (
                   <tr key={row.category} style={{ borderBottom: '1px solid var(--border-glass)' }} className="table-row-hover">
-                    <td data-label="Category" style={{ padding: '16px 24px', fontWeight: 600 }}>{row.category}</td>
-                    <td data-label="Budget Limit" style={{ padding: '16px 24px', textAlign: 'right' }}>
+                    <td style={{ padding: '12px 18px', fontWeight: 600, fontSize: '13px' }}>{row.category}</td>
+                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px' }}>
                       {row.limit > 0 ? formatMoney(row.limit, dashboardCurrency) : '—'}
                     </td>
-                    <td data-label="Actual Spent" style={{ padding: '16px 24px', textAlign: 'right', fontWeight: 600 }}>
+                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px', fontWeight: 600 }}>
                       {row.spent > 0 ? formatMoney(row.spent, dashboardCurrency) : '—'}
                     </td>
-                    <td data-label="Difference" style={{ 
-                      padding: '16px 24px', 
+                    <td style={{ 
+                      padding: '12px 18px', 
                       textAlign: 'right', 
+                      fontSize: '13px',
                       fontWeight: 700,
-                      color: row.limit === 0 ? 'var(--text)' : diffIsNegative ? 'var(--red)' : 'var(--green)'
+                      color: row.limit === 0 ? 'var(--muted)' : diffIsNegative ? 'var(--red-text)' : 'var(--green-text)'
                     }}>
                       {row.limit === 0 
                         ? '—'
                         : `${diffIsNegative ? '-' : '+'}${formatMoney(Math.abs(row.difference), dashboardCurrency)}`
                       }
                     </td>
-                    <td data-label="Status" style={{ padding: '16px 24px', textAlign: 'center' }}>
+                    <td style={{ padding: '12px 18px', textAlign: 'center' }}>
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 700,
-                        padding: '4px 10px',
-                        borderRadius: '20px',
+                        padding: '3px 10px',
+                        borderRadius: '12px',
                         display: 'inline-block',
                         background: 
-                          row.statusClass === 'green' ? 'rgba(24, 114, 104, 0.1)' : 
-                          row.statusClass === 'red' ? 'rgba(196, 73, 45, 0.1)' : 
-                          row.statusClass === 'amber' ? 'rgba(210, 154, 63, 0.1)' : 
-                          'rgba(102, 114, 127, 0.1)',
+                          row.statusClass === 'green' ? 'var(--green-soft)' : 
+                          row.statusClass === 'red' ? 'var(--red-soft)' : 
+                          row.statusClass === 'amber' ? 'var(--amber-soft)' : 
+                          'var(--surface-muted)',
                         color: 
-                          row.statusClass === 'green' ? 'var(--green)' : 
-                          row.statusClass === 'red' ? 'var(--red)' : 
-                          row.statusClass === 'amber' ? 'var(--amber)' : 
-                          'var(--muted)'
+                          row.statusClass === 'green' ? 'var(--green-text)' : 
+                          row.statusClass === 'red' ? 'var(--red-text)' : 
+                          row.statusClass === 'amber' ? 'var(--amber-text)' : 
+                          'var(--text-secondary)'
                       }}>
                         {row.statusText}
                       </span>

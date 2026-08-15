@@ -144,8 +144,8 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
   const prepareCanvas = (canvas: HTMLCanvasElement) => {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    const width = Math.max(280, Math.round(rect.width));
-    const height = Math.max(200, Math.round(rect.height));
+    const width = Math.max(300, Math.round(rect.width || canvas.clientWidth || 320));
+    const height = Math.max(260, Math.round(rect.height || canvas.clientHeight || 260));
     const scaledWidth = Math.round(width * dpr);
     const scaledHeight = Math.round(height * dpr);
 
@@ -224,9 +224,9 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
     const { ctx, width, height } = prepareCanvas(canvas);
     const total = spendingByCategory.reduce((sum, item) => sum + item.total, 0);
     const centerX = width / 2;
-    const centerY = Math.min(height * 0.48, 118);
+    const centerY = height / 2;
     const radius = Math.min(width, height) * 0.38;
-    const innerRadius = radius * 0.70;
+    const innerRadius = radius * 0.65;
     const colors = getThemeColors();
 
     ctx.clearRect(0, 0, width, height);
@@ -364,7 +364,6 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
       <section className={`panel chart-panel ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Spending by category">
         <div className="panel-heading">
           <div>
-            <span className="eyebrow">Categories</span>
             <h2>Spending mix</h2>
           </div>
           <span className="panel-total" id="topCategory">{topCategoryLabel}</span>
@@ -393,7 +392,6 @@ export const Charts: React.FC<ChartsProps> = ({ transactions, dashboardCurrency,
       <section className={`panel chart-panel ${hideOnMobile ? 'hidden-mobile' : ''}`} aria-label="Monthly cashflow">
         <div className="panel-heading">
           <div>
-            <span className="eyebrow">Cashflow</span>
             <h2>Month view</h2>
           </div>
           <span className="panel-total" id="netFlow">{`${formatMoney(netFlow, dashboardCurrency)} net`}</span>

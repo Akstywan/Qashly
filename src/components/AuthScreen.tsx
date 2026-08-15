@@ -462,30 +462,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ users, onLogin, sessionE
                 />
               </label>
 
-              <button
-                className="button button-primary"
-                type="submit"
-                style={{ marginTop: '8px' }}
-              >
-                <Icon name="user" />
-                <span>Sign in</span>
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="button button-soft"
+                  style={{ fontSize: '13px', color: 'var(--blue-text)', height: '40px', padding: '0 14px' }}
+                  onClick={() => {
+                    setAuthMode('forgot');
+                    setRecoveryStep(1);
+                  }}
+                >
+                  Forgot Password?
+                </button>
 
-              {authMode === 'signin' && (
-                <div style={{ textAlign: 'center', marginTop: '16px' }}>
-                  <button
-                    type="button"
-                    className="button button-soft"
-                    style={{ fontSize: '13px', border: 'none', background: 'none', color: 'var(--blue)', cursor: 'pointer', padding: 0 }}
-                    onClick={() => {
-                      setAuthMode('forgot');
-                      setRecoveryStep(1);
-                    }}
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-              )}
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  style={{ flex: 1, height: '40px' }}
+                >
+                  <Icon name="user" />
+                  <span>Sign in</span>
+                </button>
+              </div>
             </form>
           )}
 

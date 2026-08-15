@@ -149,21 +149,44 @@ export const AdminView: React.FC<AdminViewProps> = ({
     <>
       <section className="admin-view" id="adminView" aria-label="Admin portal">
         {/* Metric Cards Summary showing User Statistics */}
-        <div className="summary-grid admin-summary" aria-label="Admin summary" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        <div className="metrics-grid admin-summary" aria-label="Admin summary" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '18px', marginBottom: '24px' }}>
           <article className="metric">
-            <span>Total Users</span>
-            <strong id="adminUserCount">{users.length}</strong>
-            <small>Registered accounts</small>
+            <div className="metric-top">
+              <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Total Users</span>
+              <div className="metric-icon" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--blue-soft)', color: 'var(--blue-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="users" />
+              </div>
+            </div>
+            <strong id="adminUserCount" className="metric-value" style={{ fontSize: '26px', fontWeight: 800, margin: '8px 0 4px', color: 'var(--text)' }}>
+              {users.length}
+            </strong>
+            <span className="metric-sub" style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Registered accounts</span>
           </article>
+
           <article className="metric">
-            <span>Active Users</span>
-            <strong id="adminActiveCount">{users.filter((u) => !u.isFrozen).length}</strong>
-            <small>Access enabled</small>
+            <div className="metric-top">
+              <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Active Users</span>
+              <div className="metric-icon" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--green-soft)', color: 'var(--green-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="check" />
+              </div>
+            </div>
+            <strong id="adminActiveCount" className="metric-value" style={{ fontSize: '26px', fontWeight: 800, margin: '8px 0 4px', color: 'var(--text)' }}>
+              {users.filter((u) => !u.isFrozen).length}
+            </strong>
+            <span className="metric-sub" style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Access enabled</span>
           </article>
+
           <article className="metric">
-            <span>Frozen Users</span>
-            <strong id="adminFrozenCount">{users.filter((u) => u.isFrozen).length}</strong>
-            <small>Access suspended</small>
+            <div className="metric-top">
+              <span className="metric-title" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--muted)' }}>Frozen Users</span>
+              <div className="metric-icon" style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--red-soft)', color: 'var(--red-text)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="lock" />
+              </div>
+            </div>
+            <strong id="adminFrozenCount" className="metric-value" style={{ fontSize: '26px', fontWeight: 800, margin: '8px 0 4px', color: 'var(--text)' }}>
+              {users.filter((u) => u.isFrozen).length}
+            </strong>
+            <span className="metric-sub" style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Access suspended</span>
           </article>
         </div>
 
