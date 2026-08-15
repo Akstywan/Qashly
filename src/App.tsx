@@ -466,6 +466,26 @@ export const App: React.FC = () => {
     });
   };
 
+  // Helper to safely terminate current device session
+  const terminateDeviceSession = (reason: 'expired' | 'device_conflict' = 'expired') => {
+    localStorage.removeItem('qashly_active_user_id');
+    localStorage.removeItem('qashly_session_token');
+    localStorage.removeItem('qashly_last_activity');
+    setCurrentUserId(null);
+    setActiveUserId(null);
+    setEditingTransaction(null);
+    setCurrentView('dashboard');
+    if (reason === 'expired') {
+      setSessionExpired(true);
+    } else if (reason === 'device_conflict') {
+      showCustomAlert(
+        'Session Terminated',
+        'Your account was signed into from another device or browser. This session has been logged out.',
+        'warning'
+      );
+    }
+  };
+
   // Load state and users database on mount
   useEffect(() => {
     const initLoad = async () => {
@@ -474,33 +494,51 @@ export const App: React.FC = () => {
         const dbUsers = await dbService.getUsers();
         setUsers(dbUsers);
 
-        // Auto-select initial user or default user
-        if (dbUsers.length > 0) {
-          const defaultU = dbUsers.find((u) => u.username === 'akstywan') || dbUsers[0];
-          if (defaultU) {
-            setCurrentUserId(defaultU.id);
-            setActiveUserId(defaultU.id);
+        // Check for active device session saved in localStorage
+        const savedUserId = localStorage.getItem('qashly_active_user_id');
+        const savedToken = localStorage.getItem('qashly_session_token');
+        const savedTime = localStorage.getItem('qashly_last_activity');
 
-            // Fetch the active user's ledger data directly from Cloud DB
-            const ledger = await dbService.getUserLedger(defaultU.id);
-            setUserData({ [defaultU.id]: ledger });
+        if (savedUserId && savedToken && savedTime && dbUsers.length > 0) {
+          const matchedUser = dbUsers.find((u) => u.id === savedUserId);
+          const isWithinInactivityWindow = Date.now() - Number(savedTime) < 10 * 60 * 1000;
 
-            if (defaultU.baseCurrency) {
-              setTransactionCurrency(defaultU.baseCurrency);
-              setDashboardCurrency(defaultU.baseCurrency);
-            }
+          if (matchedUser && isWithinInactivityWindow) {
+            // Verify single-device token from cloud database
+            const remoteToken = await dbService.getUserSessionToken(matchedUser.id);
+            if (remoteToken === savedToken) {
+              // Valid device session! Restore user session
+              setCurrentUserId(matchedUser.id);
+              setActiveUserId(matchedUser.id);
 
-            if (defaultU.userPreferences) {
-              const prefs = defaultU.userPreferences;
-              if (prefs.defaultDisplayAccount) {
-                setSelectedAccount(prefs.defaultDisplayAccount);
-                setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
+              const ledger = await dbService.getUserLedger(matchedUser.id);
+              setUserData({ [matchedUser.id]: ledger });
+
+              if (matchedUser.baseCurrency) {
+                setTransactionCurrency(matchedUser.baseCurrency);
+                setDashboardCurrency(matchedUser.baseCurrency);
               }
-              if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
-              if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
-              if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
-              if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
+
+              if (matchedUser.userPreferences) {
+                const prefs = matchedUser.userPreferences;
+                if (prefs.defaultDisplayAccount) {
+                  setSelectedAccount(prefs.defaultDisplayAccount);
+                  setPrefDefaultDisplayAccount(prefs.defaultDisplayAccount);
+                }
+                if (prefs.defaultExpenseCategory) setPrefDefaultExpenseCategory(prefs.defaultExpenseCategory);
+                if (prefs.defaultIncomeCategory) setPrefDefaultIncomeCategory(prefs.defaultIncomeCategory);
+                if (prefs.defaultKwdPaymentMode) setPrefDefaultKwdPaymentMode(prefs.defaultKwdPaymentMode);
+                if (prefs.defaultInrPaymentMode) setPrefDefaultInrPaymentMode(prefs.defaultInrPaymentMode);
+              }
+            } else {
+              localStorage.removeItem('qashly_active_user_id');
+              localStorage.removeItem('qashly_session_token');
+              localStorage.removeItem('qashly_last_activity');
             }
+          } else {
+            localStorage.removeItem('qashly_active_user_id');
+            localStorage.removeItem('qashly_session_token');
+            localStorage.removeItem('qashly_last_activity');
           }
         }
       } catch (e) {
@@ -553,18 +591,10 @@ export const App: React.FC = () => {
         { event: 'UPDATE', schema: 'public', table: 'users' },
         (payload: any) => {
           if (currentUserId && payload.new && payload.new.id === currentUserId) {
-            const localToken = localStorage.getItem(`qashly_session_${currentUserId}`);
+            const localToken = localStorage.getItem('qashly_session_token');
             const remoteToken = payload.new.permissions?.sessionToken;
             if (localToken && remoteToken && remoteToken !== localToken) {
-              setCurrentUserId(null);
-              setActiveUserId(null);
-              setEditingTransaction(null);
-              setCurrentView('dashboard');
-              showCustomAlert(
-                'Session Terminated',
-                'Your account was signed into from another device or browser. This session has been logged out.',
-                'warning'
-              );
+              terminateDeviceSession('device_conflict');
             }
           }
         }
@@ -587,20 +617,12 @@ export const App: React.FC = () => {
 
     const checkSingleDeviceSession = async () => {
       try {
-        const localToken = localStorage.getItem(`qashly_session_${currentUserId}`);
+        const localToken = localStorage.getItem('qashly_session_token');
         if (!localToken) return;
 
         const remoteToken = await dbService.getUserSessionToken(currentUserId);
         if (remoteToken && remoteToken !== localToken) {
-          setCurrentUserId(null);
-          setActiveUserId(null);
-          setEditingTransaction(null);
-          setCurrentView('dashboard');
-          showCustomAlert(
-            'Session Terminated',
-            'Your account was signed into from another device or browser. This session has been logged out.',
-            'warning'
-          );
+          terminateDeviceSession('device_conflict');
         }
       } catch (e) {
         console.warn('Single-device session check warning:', e);
@@ -622,6 +644,7 @@ export const App: React.FC = () => {
       const now = Date.now();
       if (now - lastUpdate > 1000) {
         lastUpdate = now;
+        localStorage.setItem('qashly_last_activity', now.toString());
       }
     };
 
@@ -630,13 +653,11 @@ export const App: React.FC = () => {
 
     const interval = setInterval(() => {
       const now = Date.now();
-      if (now - lastUpdate >= TIMEOUT_MS) {
-        // Sign out due to session timeout
-        setCurrentUserId(null);
-        setActiveUserId(null);
-        setEditingTransaction(null);
-        setCurrentView('dashboard');
-        setSessionExpired(true);
+      const savedTime = localStorage.getItem('qashly_last_activity');
+      const timeSinceLastActivity = savedTime ? now - Number(savedTime) : now - lastUpdate;
+
+      if (timeSinceLastActivity >= TIMEOUT_MS) {
+        terminateDeviceSession('expired');
       }
     }, 5000);
 
@@ -760,7 +781,9 @@ export const App: React.FC = () => {
       
       // Single-Device Concurrency: Register new session token
       const deviceToken = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-      localStorage.setItem(`qashly_session_${userId}`, deviceToken);
+      localStorage.setItem('qashly_active_user_id', userId);
+      localStorage.setItem('qashly_session_token', deviceToken);
+      localStorage.setItem('qashly_last_activity', Date.now().toString());
       await dbService.updateUserSessionToken(userId, deviceToken);
 
       setCurrentUserId(userId);
@@ -808,6 +831,10 @@ export const App: React.FC = () => {
 
     setTransitionMessage('Signing Out Safely...');
     setIsTransitioning(true);
+
+    localStorage.removeItem('qashly_active_user_id');
+    localStorage.removeItem('qashly_session_token');
+    localStorage.removeItem('qashly_last_activity');
 
     setTimeout(() => {
       setCurrentUserId(null);
