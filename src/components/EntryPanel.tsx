@@ -57,7 +57,6 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   onClose,
   accounts = [],
   selectedAccount,
-  activeUserId,
   userPreferences,
   onAddAccount,
 }) => {
@@ -85,58 +84,46 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     return prefs.defaultKwdPaymentMode || prefs.defaultPaymentMode || 'Cash';
   };
 
-  // Auto-set default account when accounts list updates
+  // Synchronize account & currency when parent selectedAccount changes or accounts list updates
   useEffect(() => {
-    if (!editingTransaction && accounts.length > 0 && !accounts.some((a) => a.name === account)) {
-      setAccount(accounts[0].name);
-    }
-  }, [accounts, editingTransaction]);
+    if (editingTransaction) return;
 
-  // Auto-sync account state when parent selectedAccount changes
-  useEffect(() => {
-    if (!editingTransaction && selectedAccount && selectedAccount !== 'all') {
+    if (selectedAccount && selectedAccount !== 'all') {
       const match = accounts.find((a) => a.name === selectedAccount);
       if (match) {
         setAccount(match.name);
+        if (match.currency) {
+          setCurrency(match.currency);
+          onTransactionCurrencyChange(match.currency);
+          setPaymentMode(getPreferredPaymentMode(match.currency));
+        }
+        return;
+      }
+    }
+
+    if (accounts.length > 0 && !accounts.some((a) => a.name === account)) {
+      const defaultAcc = accounts[0];
+      setAccount(defaultAcc.name);
+      if (defaultAcc.currency) {
+        setCurrency(defaultAcc.currency);
+        onTransactionCurrencyChange(defaultAcc.currency);
+        setPaymentMode(getPreferredPaymentMode(defaultAcc.currency));
       }
     }
   }, [selectedAccount, accounts, editingTransaction]);
 
-  // Auto-sync account dropdown selection to match active currency
+  // Synchronize currency state if transactionCurrency prop changes from parent
   useEffect(() => {
-    if (!editingTransaction && currency && accounts.length > 0) {
-      const currentAccObj = accounts.find((a) => a.name === account);
-      if (!currentAccObj || currentAccObj.currency !== currency) {
-        const matchingAcc = accounts.find((a) => a.currency === currency);
-        if (matchingAcc) {
-          setAccount(matchingAcc.name);
-        }
-      }
-    }
-  }, [currency, accounts, editingTransaction]);
-
-  // Auto-sync currency & payment mode when account selection changes
-  useEffect(() => {
-    if (!editingTransaction && account) {
-      const selectedAccObj = accounts.find((a) => a.name === account);
-      if (selectedAccObj && selectedAccObj.currency) {
-        const accCurr = selectedAccObj.currency;
-        if (currency !== accCurr) {
-          setCurrency(accCurr);
-          onTransactionCurrencyChange(accCurr);
-          setPaymentMode(getPreferredPaymentMode(accCurr));
-        }
-      }
-    }
-  }, [account, accounts, currency, editingTransaction, userPreferences]);
-
-  // Auto-sync currency state when transactionCurrency prop changes from parent
-  useEffect(() => {
-    if (!editingTransaction && transactionCurrency) {
+    if (editingTransaction) return;
+    if (transactionCurrency && currency !== transactionCurrency) {
       setCurrency(transactionCurrency);
       setPaymentMode(getPreferredPaymentMode(transactionCurrency));
+      const matchAcc = accounts.find((a) => a.currency === transactionCurrency);
+      if (matchAcc && account !== matchAcc.name) {
+        setAccount(matchAcc.name);
+      }
     }
-  }, [transactionCurrency, editingTransaction, userPreferences]);
+  }, [transactionCurrency, editingTransaction]);
 
   // Handle editing mode change
   useEffect(() => {
@@ -189,20 +176,6 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     }
   }, [entryType, userPreferences]);
 
-  // Keep payment mode & account updated based on user preferences and selected currency
-  useEffect(() => {
-    if (!editingTransaction) {
-      setPaymentMode(getPreferredPaymentMode(currency));
-      const prefs = userPreferences || {};
-      const prefAcc = prefs.defaultDisplayAccount;
-      if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
-        setAccount(prefAcc);
-      } else if (accounts.length > 0 && !accounts.some((a) => a.name === account)) {
-        setAccount(accounts[0].name);
-      }
-    }
-  }, [currency, accounts, activeUserId, editingTransaction, userPreferences]);
-
   const resetForm = () => {
     setEntryType('expense');
     setAmount('');
@@ -217,15 +190,20 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
       setCategory(expenseCategories[0]);
     }
 
-    setPaymentMode(getPreferredPaymentMode(currency));
+    const activeAcc = (selectedAccount && selectedAccount !== 'all')
+      ? accounts.find((a) => a.name === selectedAccount)
+      : accounts.find((a) => a.name === (prefs.defaultDisplayAccount)) || accounts[0];
 
-    const prefAcc = prefs.defaultDisplayAccount;
-    if (prefAcc && prefAcc !== 'all' && accounts.some((a) => a.name === prefAcc)) {
-      setAccount(prefAcc);
-    } else if (accounts.length > 0) {
-      setAccount(accounts[0].name);
+    if (activeAcc) {
+      setAccount(activeAcc.name);
+      if (activeAcc.currency) {
+        setCurrency(activeAcc.currency);
+        onTransactionCurrencyChange(activeAcc.currency);
+        setPaymentMode(getPreferredPaymentMode(activeAcc.currency));
+      }
     } else {
       setAccount('');
+      setPaymentMode(getPreferredPaymentMode(currency));
     }
 
     setNotes('');
@@ -269,9 +247,25 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     setEntryType(type);
   };
 
+  const handleAccountChange = (accName: string) => {
+    setAccount(accName);
+    const selectedAccObj = accounts.find((a) => a.name === accName);
+    if (selectedAccObj && selectedAccObj.currency) {
+      const accCurr = selectedAccObj.currency;
+      setCurrency(accCurr);
+      onTransactionCurrencyChange(accCurr);
+      setPaymentMode(getPreferredPaymentMode(accCurr));
+    }
+  };
+
   const handleCurrencyChange = (curr: CurrencyCode) => {
     setCurrency(curr);
     onTransactionCurrencyChange(curr);
+    setPaymentMode(getPreferredPaymentMode(curr));
+    const matchingAcc = accounts.find((a) => a.currency === curr);
+    if (matchingAcc) {
+      setAccount(matchingAcc.name);
+    }
   };
 
   const isIncome = entryType === 'income';
@@ -449,7 +443,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
               <select
                 id="accountInput"
                 value={account}
-                onChange={(e) => setAccount(e.target.value)}
+                onChange={(e) => handleAccountChange(e.target.value)}
               >
                 {(accounts || []).length === 0 && (
                   <option value="">-- Select Account --</option>
