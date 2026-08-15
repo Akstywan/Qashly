@@ -1486,6 +1486,13 @@ export const App: React.FC = () => {
             onOpenUserPreferences={() => setCurrentView('profile')}
             onOpenTransferModal={() => setShowTransferModal(true)}
             onOpenMonthRolloverModal={() => setShowMonthRolloverModal(true)}
+            onOpenAddTransaction={() => {
+              setCurrentView('transactions');
+              setTimeout(() => {
+                const el = document.getElementById('transactionForm') || document.querySelector('.entry-sidebar');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 100);
+            }}
           />
           <main className={`workspace ${
             (currentView !== 'dashboard' && currentView !== 'transactions') || !(currentUser?.permissions?.transactions ?? true)
@@ -1500,7 +1507,7 @@ export const App: React.FC = () => {
                 onSubmit={handleSubmitTransaction}
                 transactionCurrency={transactionCurrency}
                 onTransactionCurrencyChange={setTransactionCurrency}
-                hideOnMobile={!editingTransaction}
+                hideOnMobile={currentView !== 'transactions'}
                 accounts={activeLedger.accounts || []}
                 selectedAccount={selectedAccount}
                 activeUserId={activeUserId || undefined}
@@ -1532,6 +1539,13 @@ export const App: React.FC = () => {
                 permissions={currentUser?.permissions}
                 hideTransactionsOnMobile={currentView === 'dashboard'}
                 showOnlyTransactionsOnMobile={currentView === 'transactions'}
+                onOpenAddTransaction={() => {
+                  setCurrentView('transactions');
+                  setTimeout(() => {
+                    const el = document.getElementById('transactionForm') || document.querySelector('.entry-sidebar');
+                    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 100);
+                }}
               />
             ) : currentView === 'report' ? (
               <ReportView
@@ -2221,6 +2235,8 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
+
+
 
       {/* Transfer Money Between Accounts Modal */}
       {showTransferModal && (

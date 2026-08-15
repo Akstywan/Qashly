@@ -17,6 +17,7 @@ interface EntryPanelProps {
   transactionCurrency: CurrencyCode;
   onTransactionCurrencyChange: (currency: CurrencyCode) => void;
   hideOnMobile?: boolean;
+  onClose?: () => void;
   accounts?: Account[];
   selectedAccount?: string;
   activeUserId?: string;
@@ -53,6 +54,7 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
   transactionCurrency,
   onTransactionCurrencyChange,
   hideOnMobile,
+  onClose,
   accounts = [],
   selectedAccount,
   activeUserId,
@@ -258,6 +260,9 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
     if (!editingTransaction) {
       resetForm();
     }
+    if (onClose) {
+      onClose();
+    }
   };
 
   const handleEntryTypeChange = (type: TransactionType) => {
@@ -309,16 +314,29 @@ export const EntryPanel: React.FC<EntryPanelProps> = ({
         <div>
           <h2>{editingTransaction ? 'Edit Entry' : 'Add Entry'}</h2>
         </div>
-        {editingTransaction && (
-          <button
-            className="button button-soft"
-            type="button"
-            onClick={onCancelEdit}
-            style={{ padding: '6px 12px', fontSize: '12px' }}
-          >
-            Cancel
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {editingTransaction && (
+            <button
+              className="button button-soft"
+              type="button"
+              onClick={onCancelEdit}
+              style={{ padding: '6px 12px', fontSize: '12px' }}
+            >
+              Cancel
+            </button>
+          )}
+          {onClose && (
+            <button
+              className="icon-button"
+              type="button"
+              onClick={onClose}
+              title="Close form"
+              style={{ width: '32px', height: '32px', minHeight: '32px' }}
+            >
+              <Icon name="x" />
+            </button>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleFormSubmit} id="transactionForm" className="entry-form" style={{ marginTop: '16px' }}>

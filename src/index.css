@@ -1329,4 +1329,86 @@ canvas {
   .hidden-mobile {
     display: none !important;
   }
+
+  .workspace {
+    padding: 12px 12px 76px !important;
+    gap: 14px !important;
+  }
+
+  .panel, .register-panel, .entry-panel {
+    padding: 12px 14px !important;
+    border-radius: var(--radius) !important;
+  }
+
+  .panel-heading {
+    margin-bottom: 12px !important;
+    padding-bottom: 8px !important;
+  }
+
+  .panel-heading h2 {
+    font-size: 16px !important;
+  }
+
+  .register-count {
+    font-size: 11px !important;
+    padding: 2px 8px !important;
+  }
+
+  .filters {
+    gap: 6px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .search-field, .select-field {
+    height: 34px !important;
+    padding: 0 8px !important;
+    border-radius: var(--radius-sm) !important;
+    font-size: 12px !important;
+  }
+
+  .search-field input, .select-field select {
+    font-size: 12px !important;
+  }
+
+  .table-wrapper {
+    border-radius: var(--radius-sm) !important;
+  }
+
+  .transactions-table th {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .transactions-table td {
+    padding: 8px 10px !important;
+    font-size: 12.5px !important;
+  }
+
+  .badge {
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .legend-dot {
+    width: 8px !important;
+    height: 8px !important;
+  }
+
+  .icon-button {
+    width: 32px !important;
+    height: 32px !important;
+    min-height: 32px !important;
+  }
 }
+
+.mobile-entry-modal-content .sidebar-aside.entry-sidebar {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+.mobile-entry-modal-content .field {
+  margin-bottom: 10px !important;
+}
+

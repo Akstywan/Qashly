@@ -38,6 +38,7 @@ interface DashboardViewProps {
   };
   hideTransactionsOnMobile?: boolean;
   showOnlyTransactionsOnMobile?: boolean;
+  onOpenAddTransaction?: () => void;
 }
 
 const categoryIconMap: Record<string, string> = {
@@ -74,7 +75,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   theme,
   permissions,
   hideTransactionsOnMobile,
-  showOnlyTransactionsOnMobile
+  showOnlyTransactionsOnMobile,
+  onOpenAddTransaction
 }) => {
   // Local filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -322,12 +324,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             {/* Transactions Register */}
             <section className={`panel register-panel ${hideTransactionsOnMobile ? 'hidden-mobile' : ''}`} aria-label="Transactions">
               <div className="panel-heading register-heading">
-                <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <h2>Transactions</h2>
+                  <div className="register-count" id="registerCount">
+                    {`${filteredTransactions.length} ${filteredTransactions.length === 1 ? 'item' : 'items'}`}
+                  </div>
                 </div>
-                <div className="register-count" id="registerCount">
-                  {`${filteredTransactions.length} ${filteredTransactions.length === 1 ? 'item' : 'items'}`}
-                </div>
+                {(permissions?.transactions ?? true) && onOpenAddTransaction && (
+                  <button
+                    type="button"
+                    className="button button-primary"
+                    onClick={onOpenAddTransaction}
+                    style={{ height: '34px', padding: '0 12px', fontSize: '12.5px', gap: '6px' }}
+                  >
+                    <Icon name="plus" />
+                    <span>Add Entry</span>
+                  </button>
+                )}
               </div>
 
               {/* Filters bar */}

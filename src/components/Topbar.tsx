@@ -24,6 +24,7 @@ interface TopbarProps {
   onOpenUserPreferences?: () => void;
   onOpenTransferModal?: () => void;
   onOpenMonthRolloverModal?: () => void;
+  onOpenAddTransaction?: () => void;
 }
 
 export const Topbar: React.FC<TopbarProps> = ({
@@ -46,6 +47,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   onOpenUserPreferences,
   onOpenTransferModal,
   onOpenMonthRolloverModal,
+  onOpenAddTransaction,
 }) => {
   const [showActionsMenu, setShowActionsMenu] = React.useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = React.useState(false);
@@ -371,6 +373,18 @@ export const Topbar: React.FC<TopbarProps> = ({
             />
           </label>
 
+          {(currentUser?.permissions?.transactions ?? true) && (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={onOpenAddTransaction}
+              style={{ height: '36px', padding: '0 10px', fontSize: '12px', gap: '4px' }}
+            >
+              <Icon name="plus" />
+              <span>Add</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="icon-button"
@@ -545,15 +559,6 @@ export const Topbar: React.FC<TopbarProps> = ({
       )}
 
     <nav className="mobile-bottom-nav">
-      <button
-        className={`mobile-tab-item ${currentView === 'dashboard' ? 'active' : ''}`}
-        type="button"
-        onClick={() => onViewChange('dashboard')}
-      >
-        <Icon name="chart" />
-        <span>Dashboard</span>
-      </button>
-
       {(currentUser?.permissions?.transactions ?? true) && (
         <button
           className={`mobile-tab-item ${currentView === 'transactions' ? 'active' : ''}`}
@@ -564,6 +569,15 @@ export const Topbar: React.FC<TopbarProps> = ({
           <span>Transactions</span>
         </button>
       )}
+
+      <button
+        className={`mobile-tab-item ${currentView === 'dashboard' ? 'active' : ''}`}
+        type="button"
+        onClick={() => onViewChange('dashboard')}
+      >
+        <Icon name="chart" />
+        <span>Spending</span>
+      </button>
 
       <button
         className={`mobile-tab-item ${currentView === 'report' ? 'active' : ''}`}
@@ -597,7 +611,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       <button
         className={`mobile-tab-item ${currentView === 'profile' ? 'active' : ''}`}
         type="button"
-        onClick={() => onViewChange(currentView === 'profile' ? 'dashboard' : 'profile')}
+        onClick={() => onViewChange(currentView === 'profile' ? 'transactions' : 'profile')}
       >
         <Icon name="user" />
         <span>Profile</span>
