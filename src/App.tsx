@@ -801,8 +801,8 @@ export const App: React.FC = () => {
         setShowBaseCurrencyPromptModal(true);
       }
 
-      // Check if new user has 0 custom accounts created
-      if (!ledger.accounts || ledger.accounts.length === 0) {
+      // Check if new user (non-admin) has 0 custom accounts created
+      if (loggedUser?.role !== 'admin' && (!ledger.accounts || ledger.accounts.length === 0)) {
         setTimeout(async () => {
           await showCustomAlert(
             'Account Setup Required',
@@ -1878,7 +1878,7 @@ export const App: React.FC = () => {
               Create and manage custom accounts for tracking expenses separately across different banks, wallets, or credit cards.
             </p>
 
-            {(activeLedger.accounts || []).length === 0 && (
+            {activeUser?.role !== 'admin' && (activeLedger.accounts || []).length === 0 && (
               <div style={{
                 padding: '10px 14px',
                 borderRadius: '12px',
@@ -1902,44 +1902,56 @@ export const App: React.FC = () => {
                 handleAddAccount(newManageAccName.trim(), 'checking', newManageAccCurrency);
                 setNewManageAccName('');
               }
-            }} style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="New account name (e.g. Boubyan Salary)"
-                value={newManageAccName}
-                onChange={(e) => setNewManageAccName(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-glass)',
-                  background: 'var(--field)',
-                  color: 'var(--text)',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-              <select
-                value={newManageAccCurrency}
-                onChange={(e) => setNewManageAccCurrency(e.target.value as CurrencyCode)}
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-glass)',
-                  background: 'var(--field)',
-                  color: 'var(--text)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="KWD">KWD</option>
-                <option value="INR">INR</option>
-              </select>
-              <button type="submit" className="button button-primary" style={{ padding: '0 16px', minHeight: '36px', fontSize: '13px', whiteSpace: 'nowrap' }}>
-                + Add
-              </button>
+            }} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>Account Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Salary Account, KIB Savings, Cash"
+                  value={newManageAccName}
+                  onChange={(e) => setNewManageAccName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    height: '40px',
+                    padding: '8px 14px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13.5px',
+                    outline: 'none'
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '10px' }}>
+                <select
+                  value={newManageAccCurrency}
+                  onChange={(e) => setNewManageAccCurrency(e.target.value as CurrencyCode)}
+                  style={{
+                    height: '40px',
+                    padding: '0 12px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-glass)',
+                    background: 'var(--field)',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="KWD">KWD</option>
+                  <option value="INR">INR</option>
+                </select>
+
+                <button type="submit" className="button button-primary" style={{ height: '40px', fontSize: '13px', whiteSpace: 'nowrap' }}>
+                  <Icon name="plus" />
+                  <span>Add Account</span>
+                </button>
+              </div>
             </form>
 
             {/* Accounts List */}
