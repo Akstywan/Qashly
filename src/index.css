@@ -1324,3 +1324,9 @@ canvas {
 .animate-fade-in {
   animation: fadeIn 220ms ease-out forwards;
 }
+
+@media (max-width: 900px) {
+  .hidden-mobile {
+    display: none !important;
+  }
+}
