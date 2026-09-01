@@ -1412,3 +1412,12 @@ canvas {
   margin-bottom: 10px !important;
 }
 
+@media (max-width: 640px) {
+  .rollover-modal-content {
+    padding: 18px 14px !important;
+    max-height: 92vh !important;
+    border-radius: 18px !important;
+    gap: 12px !important;
+  }
+}
+

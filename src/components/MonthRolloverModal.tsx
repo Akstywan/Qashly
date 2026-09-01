@@ -41,39 +41,42 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   const [sourceMonthKey, setSourceMonthKey] = useState<string>(getPreviousMonthKey(currentMonthKey));
   const [targetMonthKey, setTargetMonthKey] = useState<string>(currentMonthKey);
   const [amountInput, setAmountInput] = useState<string>('');
-  const [selectedAccount, setSelectedAccount] = useState<string>(userAccounts[0]?.name || '');
+  const [sourceAccount, setSourceAccount] = useState<string>('all');
+  const [targetAccount, setTargetAccount] = useState<string>(userAccounts[0]?.name || '');
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Auto-sync currency when selected account changes
+  // Auto-sync currency when source account changes
   useEffect(() => {
-    if (selectedAccount && selectedAccount !== 'all') {
-      const matchAcc = userAccounts.find((a) => a.name === selectedAccount);
+    if (sourceAccount && sourceAccount !== 'all') {
+      const matchAcc = userAccounts.find((a) => a.name === sourceAccount);
       if (matchAcc && matchAcc.currency && matchAcc.currency !== currency) {
         setCurrency(matchAcc.currency);
       }
     }
-  }, [selectedAccount, userAccounts]);
+  }, [sourceAccount, userAccounts]);
 
-  // Net balance for source month and selected account
-  const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency, selectedAccount);
+  // Net balance for source month and source account
+  const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency, sourceAccount);
 
   useEffect(() => {
     setCurrency(defaultCurrency);
     setSourceMonthKey(getPreviousMonthKey(currentMonthKey));
     setTargetMonthKey(currentMonthKey);
-    if (userAccounts.length > 0 && !userAccounts.some((a) => a.name === selectedAccount)) {
-      setSelectedAccount(userAccounts[0].name);
+    if (userAccounts.length > 0) {
+      if (!userAccounts.some((a) => a.name === targetAccount)) {
+        setTargetAccount(userAccounts[0].name);
+      }
     }
   }, [currentMonthKey, defaultCurrency, isOpen, userAccounts]);
 
   useEffect(() => {
-    const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency, selectedAccount);
+    const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency, sourceAccount);
     const positiveNet = Math.max(0, net);
     const decimals = currencyMeta[currency]?.decimals ?? 3;
     setAmountInput(positiveNet > 0 ? positiveNet.toFixed(decimals) : '');
     setNotes(`Balance rollover from ${formatMonthLabel(sourceMonthKey)}`);
-  }, [sourceMonthKey, currency, selectedAccount, transactions]);
+  }, [sourceMonthKey, currency, sourceAccount, transactions]);
 
   if (!isOpen) return null;
 
@@ -85,6 +88,8 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
       return;
     }
 
+    const finalTargetAccount = targetAccount || userAccounts[0]?.name || 'Kuwait Cash Account';
+
     setIsSubmitting(true);
     try {
       await onConfirmRollover({
@@ -92,8 +97,8 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
         targetMonth: targetMonthKey,
         currency,
         amount: num,
-        account: selectedAccount,
-        paymentMode: selectedAccount,
+        account: finalTargetAccount,
+        paymentMode: finalTargetAccount,
         notes: notes.trim() || `Balance rollover from ${formatMonthLabel(sourceMonthKey)}`
       });
       onClose();
@@ -114,6 +119,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
 
   return (
     <div
+      className="modal-overlay"
       style={{
         position: 'fixed',
         top: 0,
@@ -126,18 +132,23 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 10500,
-        padding: '20px',
+        padding: '16px',
         animation: 'fade-in 0.25s ease'
       }}
+      onClick={onClose}
     >
       <div
+        className="modal-content rollover-modal-content animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
         style={{
           background: 'var(--surface)',
           border: '1px solid var(--border-strong)',
           borderRadius: '24px',
-          padding: '28px 24px',
-          maxWidth: '480px',
+          padding: '24px 20px',
+          maxWidth: '500px',
           width: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
           boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)',
           display: 'flex',
           flexDirection: 'column',
@@ -281,18 +292,20 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
             </label>
           </div>
 
-            <label className="field" style={{ gridColumn: 'span 2' }}>
-              <span>Deposit Account</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <label className="field">
+              <span>Source Account</span>
               <select
-                value={selectedAccount}
+                value={sourceAccount}
                 onChange={(e) => {
-                  const newAcc = e.target.value;
-                  setSelectedAccount(newAcc);
-                  if (newAcc && newAcc !== 'all') {
-                    const matchAcc = userAccounts.find((a) => a.name === newAcc);
+                  const newSource = e.target.value;
+                  setSourceAccount(newSource);
+                  if (newSource && newSource !== 'all') {
+                    const matchAcc = userAccounts.find((a) => a.name === newSource);
                     if (matchAcc && matchAcc.currency) {
                       setCurrency(matchAcc.currency);
                     }
+                    setTargetAccount(newSource);
                   }
                 }}
                 style={{
@@ -313,6 +326,33 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
                 ))}
               </select>
             </label>
+
+            <label className="field">
+              <span>Deposit Account</span>
+              <select
+                value={targetAccount}
+                onChange={(e) => setTargetAccount(e.target.value)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-glass)',
+                  background: 'var(--field)',
+                  color: 'var(--text)',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              >
+                {userAccounts.length === 0 && (
+                  <option value="">-- Select Account --</option>
+                )}
+                {userAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.name}>
+                    {acc.name} ({acc.currency || 'KWD'})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           <label className="field">
             <span>Notes / Description</span>
