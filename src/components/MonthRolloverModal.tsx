@@ -273,7 +273,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
               <input
                 type="number"
                 step={stepVal}
-                min="0.001"
+                min={stepVal}
                 placeholder={`0.${'0'.repeat(decimals)}`}
                 value={amountInput}
                 onChange={(e) => setAmountInput(e.target.value)}
