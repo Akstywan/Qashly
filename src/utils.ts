@@ -207,12 +207,16 @@ export function getNextMonthKey(monthKey: string): string {
 }
 
 export function calculateMonthNetBalance(
-  transactions: { date: string; currency: string; type: string; amount: number }[],
+  transactions: { date: string; currency: string; type: string; amount: number; account?: string }[],
   monthKey: string,
-  currency: CurrencyCode
+  currency: CurrencyCode,
+  accountName?: string
 ): number {
   const monthTxs = transactions.filter(
-    (t) => t.date.startsWith(monthKey) && t.currency === currency
+    (t) =>
+      t.date.startsWith(monthKey) &&
+      t.currency === currency &&
+      (!accountName || accountName === 'all' || t.account === accountName)
   );
   const totalIncome = monthTxs
     .filter((t) => t.type === 'income')

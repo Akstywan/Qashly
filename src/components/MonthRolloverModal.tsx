@@ -45,8 +45,18 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Net balance for source month
-  const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency);
+  // Auto-sync currency when selected account changes
+  useEffect(() => {
+    if (selectedAccount && selectedAccount !== 'all') {
+      const matchAcc = userAccounts.find((a) => a.name === selectedAccount);
+      if (matchAcc && matchAcc.currency && matchAcc.currency !== currency) {
+        setCurrency(matchAcc.currency);
+      }
+    }
+  }, [selectedAccount, userAccounts]);
+
+  // Net balance for source month and selected account
+  const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency, selectedAccount);
 
   useEffect(() => {
     setCurrency(defaultCurrency);
@@ -58,12 +68,12 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   }, [currentMonthKey, defaultCurrency, isOpen, userAccounts]);
 
   useEffect(() => {
-    const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency);
+    const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency, selectedAccount);
     const positiveNet = Math.max(0, net);
     const decimals = currencyMeta[currency]?.decimals ?? 3;
     setAmountInput(positiveNet > 0 ? positiveNet.toFixed(decimals) : '');
     setNotes(`Balance rollover from ${formatMonthLabel(sourceMonthKey)}`);
-  }, [sourceMonthKey, currency, transactions]);
+  }, [sourceMonthKey, currency, selectedAccount, transactions]);
 
   if (!isOpen) return null;
 
@@ -275,7 +285,16 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
               <span>Deposit Account</span>
               <select
                 value={selectedAccount}
-                onChange={(e) => setSelectedAccount(e.target.value)}
+                onChange={(e) => {
+                  const newAcc = e.target.value;
+                  setSelectedAccount(newAcc);
+                  if (newAcc && newAcc !== 'all') {
+                    const matchAcc = userAccounts.find((a) => a.name === newAcc);
+                    if (matchAcc && matchAcc.currency) {
+                      setCurrency(matchAcc.currency);
+                    }
+                  }
+                }}
                 style={{
                   padding: '10px 12px',
                   borderRadius: '10px',
@@ -286,9 +305,7 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
                   outline: 'none'
                 }}
               >
-                {userAccounts.length === 0 && (
-                  <option value="">-- Select Account --</option>
-                )}
+                <option value="all">All Accounts ({currency})</option>
                 {userAccounts.map((acc) => (
                   <option key={acc.id} value={acc.name}>
                     {acc.name} ({acc.currency || 'KWD'})
