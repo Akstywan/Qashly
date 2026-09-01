@@ -2546,6 +2546,8 @@ export const App: React.FC = () => {
         transactions={activeLedger?.transactions || []}
         userAccounts={activeLedger?.accounts || []}
         defaultCurrency={dashboardCurrency}
+        selectedAccount={selectedAccount}
+        userPreferences={activeUser?.userPreferences}
       />
     </div>
   );

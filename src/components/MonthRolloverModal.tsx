@@ -25,6 +25,8 @@ interface MonthRolloverModalProps {
   transactions: any[];
   userAccounts?: Account[];
   defaultCurrency?: CurrencyCode;
+  selectedAccount?: string;
+  userPreferences?: any;
 }
 
 export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
@@ -35,14 +37,27 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   currentMonthKey,
   transactions,
   userAccounts = [],
-  defaultCurrency = 'KWD'
+  defaultCurrency = 'KWD',
+  selectedAccount,
+  userPreferences
 }) => {
+  const getInitialAccount = () => {
+    const prefs = userPreferences || {};
+    if (selectedAccount && selectedAccount !== 'all' && userAccounts.some((a) => a.name === selectedAccount)) {
+      return selectedAccount;
+    }
+    if (prefs.defaultDisplayAccount && prefs.defaultDisplayAccount !== 'all' && userAccounts.some((a) => a.name === prefs.defaultDisplayAccount)) {
+      return prefs.defaultDisplayAccount;
+    }
+    return userAccounts[0]?.name || '';
+  };
+
   const [currency, setCurrency] = useState<CurrencyCode>(defaultCurrency);
   const [sourceMonthKey, setSourceMonthKey] = useState<string>(getPreviousMonthKey(currentMonthKey));
   const [targetMonthKey, setTargetMonthKey] = useState<string>(currentMonthKey);
   const [amountInput, setAmountInput] = useState<string>('');
-  const [sourceAccount, setSourceAccount] = useState<string>('all');
-  const [targetAccount, setTargetAccount] = useState<string>(userAccounts[0]?.name || '');
+  const [sourceAccount, setSourceAccount] = useState<string>(() => getInitialAccount());
+  const [targetAccount, setTargetAccount] = useState<string>(() => getInitialAccount());
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -60,15 +75,24 @@ export const MonthRolloverModal: React.FC<MonthRolloverModalProps> = ({
   const netBalance = calculateMonthNetBalance(transactions, sourceMonthKey, currency, sourceAccount);
 
   useEffect(() => {
-    setCurrency(defaultCurrency);
+    if (!isOpen) return;
+
+    const initAcc = getInitialAccount();
+    if (initAcc) {
+      setSourceAccount(initAcc);
+      setTargetAccount(initAcc);
+      const matchAcc = userAccounts.find((a) => a.name === initAcc);
+      if (matchAcc && matchAcc.currency) {
+        setCurrency(matchAcc.currency);
+      }
+    } else {
+      setCurrency(defaultCurrency);
+      setSourceAccount('all');
+    }
+
     setSourceMonthKey(getPreviousMonthKey(currentMonthKey));
     setTargetMonthKey(currentMonthKey);
-    if (userAccounts.length > 0) {
-      if (!userAccounts.some((a) => a.name === targetAccount)) {
-        setTargetAccount(userAccounts[0].name);
-      }
-    }
-  }, [currentMonthKey, defaultCurrency, isOpen, userAccounts]);
+  }, [isOpen, currentMonthKey, defaultCurrency, selectedAccount, userAccounts, userPreferences]);
 
   useEffect(() => {
     const net = calculateMonthNetBalance(transactions, sourceMonthKey, currency, sourceAccount);
